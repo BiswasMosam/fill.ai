@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 4px 2px; color: #1d2130; }
+  .f { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+  label { font-weight: 600; font-size: 14px; }
+  input[type=url] { font: inherit; padding: 9px 11px; border: 1px solid #cfd4e2; border-radius: 8px; }
+  .opts { display: flex; gap: 16px; } .opts label { font-weight: 400; }
+</style>
+</head>
+<body>
+  <div class="f"><label for="site">Portfolio or personal website</label><input id="site" name="website" type="url"></div>
+  <div class="f">
+    <span id="mode-q" style="font-weight:600;font-size:14px">Preferred way of working</span>
+    <div class="opts" role="radiogroup" aria-labelledby="mode-q">
+      <label><input type="radio" name="mode" value="remote"> Remote</label>
+      <label><input type="radio" name="mode" value="hybrid"> Hybrid</label>
+      <label><input type="radio" name="mode" value="onsite"> On-site</label>
+    </div>
+  </div>
+</body>
+</html>

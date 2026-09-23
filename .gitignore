@@ -5,10 +5,11 @@ profile*.json
 .env
 .env.*
 
-# Tooling
+# Build output and tooling
 node_modules/
 dist/
-build/
+dist-test/
+test/e2e/out/
 .venv/
 __pycache__/
 .DS_Store

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>fill.ai</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <header class="top">
+    <div class="top-inner">
+      <a class="brand" href="#top" aria-label="fill.ai home">
+        <img src="icons/icon48.png" alt="" width="26" height="26">
+        <span>fill.ai</span>
+      </a>
+      <nav class="nav" aria-label="Sections">
+        <a href="#connect">Setup</a>
+        <a href="#profile">Profile</a>
+        <a href="#answers">Saved answers</a>
+        <a href="#settings">Settings</a>
+      </nav>
+      <span id="readiness" class="readiness">Checking…</span>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <p class="eyebrow">Your forms, filled</p>
+      <h1>Teach it once.<br><span class="grad">It fills forms for you.</span></h1>
+      <p class="lede">fill.ai reads your resume and remembers you. On any form, press <kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>F</kbd> or click the fill.ai icon. It fills what it knows, asks about what it doesn't, and never presses submit.</p>
+    </section>
+
+    <section id="connect" class="card step">
+      <div class="step-head"><span class="step-no">1</span><div><h2>Connect Claude</h2><p class="sub">fill.ai uses Claude Opus 5 to understand your resume and each form. Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. It stays in this browser.</p></div></div>
+      <div class="key-row">
+        <div class="key-box">
+          <input id="apiKey" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false" aria-label="Claude API key">
+          <button id="toggleKey" class="ghost small" type="button">Show</button>
+        </div>
+        <button id="saveKey" class="primary" type="button">Save and test</button>
+      </div>
+      <p id="keyStatus" class="status" role="status"></p>
+    </section>
+
+    <section id="teach" class="card step">
+      <div class="step-head"><span class="step-no">2</span><div><h2>Teach it about you</h2><p class="sub">Start with your resume. Add your portfolio, LinkedIn or anything else for a fuller picture.</p></div></div>
+      <label id="drop" class="drop">
+        <input id="files" type="file" multiple accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.webp">
+        <span class="drop-icon" aria-hidden="true"></span>
+        <strong>Drop your resume here</strong>
+        <span>or click to choose · PDF, text or image</span>
+      </label>
+      <ul id="fileList" class="files"></ul>
+      <div class="grid2">
+        <label class="lbl">Links, one per line
+          <textarea id="urls" rows="3" placeholder="https://yourportfolio.com&#10;https://www.linkedin.com/in/you"></textarea>
+        </label>
+        <label class="lbl">Anything else
+          <textarea id="notes" rows="3" placeholder="Achievements, your LinkedIn About, things forms often ask"></textarea>
+        </label>
+      </div>
+      <label class="check"><input id="useResume" type="checkbox" checked> Attach my resume PDF when a form asks for a resume or CV</label>
+      <div class="actions">
+        <button id="build" class="primary big" type="button">Build my profile</button>
+        <p id="buildStatus" class="status" role="status"></p>
+      </div>
+    </section>
+
+    <section id="profile" class="card">
+      <div class="card-head">
+        <div><h2>Your profile</h2><p class="sub" id="profileSub">Everything fill.ai knows about you. Edit anything; it only uses what is here.</p></div>
+      </div>
+      <div id="profileEditor" class="editor"></div>
+    </section>
+
+    <section id="answers" class="card">
+      <div class="card-head">
+        <div><h2>Saved answers</h2><p class="sub">Answers you chose to keep while filling forms. They win over your resume.</p></div>
+        <button id="addFact" class="ghost" type="button">Add an answer</button>
+      </div>
+      <div id="factList" class="facts"></div>
+    </section>
+
+    <section id="settings" class="card">
+      <h2>Settings</h2>
+      <div class="setting">
+        <div><h3>How careful</h3><p class="sub">Careful takes a little longer and thinks harder about each field. Recommended.</p></div>
+        <div class="seg" id="effort" role="radiogroup" aria-label="How careful">
+          <button type="button" role="radio" data-effort="low">Fast</button>
+          <button type="button" role="radio" data-effort="medium">Balanced</button>
+          <button type="button" role="radio" data-effort="high">Careful</button>
+        </div>
+      </div>
+      <div class="setting">
+        <div><h3>Keyboard shortcut</h3><p class="sub">Opens fill.ai on the current page.</p></div>
+        <div class="inline"><kbd id="shortcut">Alt+Shift+F</kbd><button id="changeShortcut" class="ghost small" type="button">Change</button></div>
+      </div>
+      <div class="setting">
+        <div><h3>Resume for uploads</h3><p class="sub" id="resumeFileInfo">No file saved.</p></div>
+        <button id="removeResume" class="ghost small" type="button" hidden>Remove</button>
+      </div>
+      <details class="advanced">
+        <summary>Advanced</summary>
+        <label class="lbl">API base URL <span class="faint">(leave empty for Anthropic)</span>
+          <input id="baseURL" type="url" placeholder="https://api.anthropic.com" spellcheck="false">
+        </label>
+      </details>
+    </section>
+
+    <section id="data" class="card">
+      <h2>Your data</h2>
+      <p class="sub">Your profile, saved answers and key live only in this browser. While a form is being filled, the form's questions and your profile are sent to Anthropic to work out the answers. Nothing is ever submitted for you.</p>
+      <div class="actions wrap">
+        <button id="exportData" class="ghost" type="button">Export profile</button>
+        <label class="ghost button-like">Import profile<input id="importData" type="file" accept="application/json,.json" hidden></label>
+        <button id="wipe" class="danger" type="button">Delete everything</button>
+      </div>
+    </section>
+
+    <footer class="foot">fill.ai never submits a form. You check, then you submit.</footer>
+  </main>
+
+  <div id="savebar" class="savebar" hidden>
+    <span>Unsaved changes to your profile</span>
+    <button id="discard" class="ghost small" type="button">Discard</button>
+    <button id="saveProfile" class="primary small" type="button">Save</button>
+  </div>
+  <div id="toast" class="toast" role="status" hidden></div>
+  <script src="options.js"></script>
+</body>
+</html>

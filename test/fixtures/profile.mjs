@@ -1,0 +1,70 @@
+// A made-up person used by every test. Never put a real profile in this repo.
+export const PROFILE = {
+  basics: {
+    full_name: 'Asha Rani Verma',
+    first_name: 'Asha',
+    middle_name: 'Rani',
+    last_name: 'Verma',
+    email: 'asha.verma@example.com',
+    phone: '+91 98765 43210',
+    headline: 'Full-stack developer and ML engineer',
+    summary: 'Builds web apps and small ML systems. Likes clean interfaces and honest data.',
+    date_of_birth: '',
+    nationality: 'Indian',
+    location: { address: '', city: 'Pune', state: 'Maharashtra', country: 'India', postal_code: '411001' },
+  },
+  links: [
+    { label: 'LinkedIn', url: 'https://www.linkedin.com/in/asha-verma-example' },
+    { label: 'GitHub', url: 'https://github.com/asha-example' },
+    { label: 'Portfolio', url: 'https://asha.example.dev' },
+  ],
+  education: [
+    {
+      institution: 'Example Institute of Technology',
+      degree: 'B.Tech',
+      field_of_study: 'Artificial Intelligence and Data Science',
+      start: '2022',
+      end: '2026',
+      grade: 'CGPA 8.1',
+      location: 'Pune',
+      highlights: [],
+    },
+  ],
+  experience: [
+    {
+      company: 'Nimbus Labs',
+      title: 'Software Developer Intern',
+      employment_type: 'Internship',
+      start: '2026-01',
+      end: '2026-04',
+      is_current: false,
+      location: 'Remote',
+      highlights: ['Built a React dashboard for sensor data', 'Cut API response time by 40% with caching'],
+    },
+  ],
+  projects: [
+    {
+      name: 'ShelfSense',
+      role: 'Solo developer',
+      start: '2025-06',
+      end: '2025-09',
+      link: 'https://github.com/asha-example/shelfsense',
+      tech: ['Python', 'FastAPI', 'React'],
+      description: 'Inventory app that predicts restock dates for small shops.',
+      highlights: ['Used by 3 local shops'],
+    },
+  ],
+  skills: [
+    { category: 'Languages', items: ['Python', 'JavaScript', 'Java'] },
+    { category: 'Frameworks', items: ['React', 'FastAPI'] },
+  ],
+  certifications: [],
+  publications: [],
+  awards: [],
+  leadership: [],
+  languages: [
+    { language: 'English', proficiency: 'Fluent' },
+    { language: 'Hindi', proficiency: 'Native' },
+  ],
+  other: [],
+};

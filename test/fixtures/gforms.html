@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Workshop registration</title>
+<!--
+  Built to match the structure Google Forms uses: questions are role=listitem,
+  titles are role=heading, choices are divs with role=radio / role=checkbox and
+  aria-checked, and dropdowns are role=listbox with a popup of role=option.
+  No native radios, checkboxes or selects anywhere.
+-->
+<style>
+  body { font: 14px/1.5 Roboto, system-ui, sans-serif; background: #f0ebf8; margin: 0; color: #202124; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 24px 12px 120px; }
+  .head { background: #fff; border-radius: 8px; border-top: 10px solid #673ab7; padding: 22px 24px; margin-bottom: 12px; }
+  .head h1 { margin: 0 0 6px; font-size: 30px; font-weight: 400; }
+  [role=listitem].q { background: #fff; border-radius: 8px; padding: 22px 24px; margin-bottom: 12px; }
+  [role=heading] { font-size: 16px; margin-bottom: 14px; }
+  .req { color: #d93025; }
+  input.t, textarea.t { border: 0; border-bottom: 1px solid #dadce0; width: 60%; font: inherit; padding: 6px 0; outline: none; }
+  textarea.t { width: 100%; }
+  [role=radio], [role=checkbox] { display: flex; align-items: center; gap: 12px; padding: 7px 0; cursor: pointer; }
+  .mark { width: 18px; height: 18px; border: 2px solid #5f6368; border-radius: 50%; box-sizing: border-box; }
+  [role=checkbox] .mark { border-radius: 3px; }
+  [aria-checked=true] .mark { border-color: #673ab7; background: radial-gradient(circle, #673ab7 45%, transparent 50%); }
+  [role=checkbox][aria-checked=true] .mark { background: #673ab7; }
+  [role=listbox] { display: inline-flex; min-width: 180px; border: 1px solid #dadce0; border-radius: 4px; padding: 8px 12px; cursor: pointer; position: relative; }
+  [role=listbox] [role=option] { display: none; }
+  [role=listbox] [role=option][aria-selected=true] { display: block; }
+  .popup { position: absolute; background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.25); border-radius: 4px; padding: 6px 0; z-index: 5; }
+  .popup [role=option] { padding: 8px 16px; cursor: pointer; }
+  .popup [role=option]:hover { background: #f1f3f4; }
+  [role=button] { display: inline-block; background: #673ab7; color: #fff; padding: 8px 24px; border-radius: 4px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head"><h1>AI workshop registration</h1><div>Spots are limited. We will confirm by email.</div></div>
+
+  <div role="list" id="page1">
+    <div role="listitem" class="q">
+      <div role="heading" aria-level="3" id="h-name">Full name <span class="req" aria-label="Required question">*</span></div>
+      <input class="t" type="text" aria-labelledby="h-name" autocomplete="off">
+    </div>
+    <div role="listitem" class="q">
+      <div role="heading" aria-level="3" id="h-email">Email address <span class="req" aria-label="Required question">*</span></div>
+      <input class="t" type="email" aria-labelledby="h-email">
+    </div>
+    <div role="listitem" class="q">
+      <div role="heading" aria-level="3" id="h-year">Year of study</div>
+      <div role="radiogroup" aria-labelledby="h-year">
+        <div role="radio" aria-checked="false" data-value="First year" aria-label="First year" tabindex="0"><div class="mark"></div><span>First year</span></div>
+        <div role="radio" aria-checked="false" data-value="Final year" aria-label="Final year" tabindex="0"><div class="mark"></div><span>Final year</span></div>
+        <div role="radio" aria-checked="false" data-value="Graduated" aria-label="Graduated" tabindex="0"><div class="mark"></div><span>Graduated</span></div>
+      </div>
+    </div>
+    <div role="listitem" class="q">
+      <div role="heading" aria-level="3" id="h-lang">Languages you speak</div>
+      <div role="list" aria-labelledby="h-lang">
+        <div role="listitem"><label><div role="checkbox" aria-checked="false" aria-label="English" data-answer-value="English" tabindex="0"><div class="mark"></div></div></label><span>English</span></div>
+        <div role="listitem"><label><div role="checkbox" aria-checked="false" aria-label="Hindi" data-answer-value="Hindi" tabindex="0"><div class="mark"></div></div></label><span>Hindi</span></div>
+        <div role="listitem"><label><div role="checkbox" aria-checked="false" aria-label="Marathi" data-answer-value="Marathi" tabindex="0"><div class="mark"></div></div></label><span>Marathi</span></div>
+        <div role="listitem"><label><div role="checkbox" aria-checked="false" aria-label="Tamil" data-answer-value="Tamil" tabindex="0"><div class="mark"></div></div></label><span>Tamil</span></div>
+      </div>
+    </div>
+    <div role="listitem" class="q">
+      <div role="heading" aria-level="3" id="h-country">Country</div>
+      <div role="listbox" aria-labelledby="h-country" tabindex="0" id="country">
+        <div role="option" data-value="" aria-selected="true"><span>Choose</span></div>
+        <div role="option" data-value="India" aria-selected="false"><span>India</span></div>
+        <div role="option" data-value="Indonesia" aria-selected="false"><span>Indonesia</span></div>
+        <div role="option" data-value="Other" aria-selected="false"><span>Other</span></div>
+      </div>
+    </div>
+    <div role="listitem" class="q">
+      <div role="heading" aria-level="3" id="h-else">Anything else you would like us to know?</div>
+      <textarea class="t" rows="3" aria-labelledby="h-else"></textarea>
+    </div>
+    <div role="button" id="next" tabindex="0">Next</div>
+  </div>
+
+  <div role="list" id="page2" hidden>
+    <div role="listitem" class="q">
+      <div role="heading" aria-level="3" id="h-li">LinkedIn profile</div>
+      <input class="t" type="text" aria-labelledby="h-li">
+    </div>
+    <div role="listitem" class="q">
+      <div role="heading" aria-level="3" id="h-inst">College or university</div>
+      <input class="t" type="text" aria-labelledby="h-inst">
+    </div>
+  </div>
+</div>
+<script>
+  // Google Forms reacts to real clicks; so does this.
+  document.addEventListener('click', (e) => {
+    const radio = e.target.closest('[role=radio]');
+    if (radio) {
+      radio.closest('[role=radiogroup]').querySelectorAll('[role=radio]').forEach((r) => r.setAttribute('aria-checked', String(r === radio)));
+      return;
+    }
+    const box = e.target.closest('[role=checkbox]');
+    if (box) {
+      box.setAttribute('aria-checked', String(box.getAttribute('aria-checked') !== 'true'));
+      return;
+    }
+    const popupOption = e.target.closest('.popup [role=option]');
+    if (popupOption) {
+      const lb = document.getElementById(popupOption.closest('.popup').dataset.for);
+      lb.querySelectorAll('[role=option]').forEach((o) => o.setAttribute('aria-selected', String(o.dataset.value === popupOption.dataset.value)));
+      popupOption.closest('.popup').remove();
+      return;
+    }
+    const lb = e.target.closest('[role=listbox]');
+    if (lb && !document.querySelector('.popup')) {
+      const r = lb.getBoundingClientRect();
+      const pop = document.createElement('div');
+      pop.className = 'popup';
+      pop.setAttribute('role', 'presentation');
+      pop.dataset.for = lb.id;
+      pop.style.left = `${r.left + scrollX}px`;
+      pop.style.top = `${r.top + scrollY}px`;
+      lb.querySelectorAll('[role=option]').forEach((o) => {
+        const c = o.cloneNode(true);
+        c.style.display = 'block';
+        pop.appendChild(c);
+      });
+      document.body.appendChild(pop);
+      return;
+    }
+    if (e.target.closest('#next')) {
+      document.getElementById('page1').hidden = true;
+      document.getElementById('page2').hidden = false;
+    }
+  });
+</script>
+</body>
+</html>

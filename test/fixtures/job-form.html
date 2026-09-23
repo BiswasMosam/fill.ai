@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Apply · Frontend Engineer · Orbit</title>
+<style>
+  body { font: 15px/1.5 system-ui, sans-serif; background: #f6f7fb; color: #1d2130; margin: 0; }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 40px 20px 120px; }
+  h1 { margin: 0 0 6px; } .job { color: #5b6275; margin: 0 0 28px; }
+  .job-desc { background: #fff; border-radius: 12px; padding: 16px 20px; margin-bottom: 24px; color: #394056; }
+  form { background: #fff; border-radius: 14px; padding: 24px 28px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  h2 { font-size: 17px; margin: 28px 0 12px; } h2:first-child { margin-top: 0; }
+  .f { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  label { font-weight: 600; font-size: 14px; }
+  input[type=text], input[type=email], input[type=tel], input[type=url], input[type=number], select, textarea { font: inherit; padding: 9px 11px; border: 1px solid #cfd4e2; border-radius: 8px; }
+  fieldset { border: 0; padding: 0; margin: 0 0 14px; } legend { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+  .opt { display: inline-flex; gap: 6px; margin-right: 16px; font-weight: 400; }
+  .upload input { display: none; } .upload .btn { display: inline-block; padding: 8px 14px; border: 1px dashed #8b93ad; border-radius: 8px; cursor: pointer; font-weight: 500; }
+  iframe { width: 100%; height: 190px; border: 0; }
+  .honeypot { position: absolute; left: -9999px; top: 0; }
+  button[type=submit] { margin-top: 20px; padding: 11px 22px; border: 0; border-radius: 10px; background: #3044d6; color: #fff; font: 600 15px system-ui; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Frontend Engineer</h1>
+  <p class="job">Orbit · Bengaluru or remote · Full time</p>
+  <div class="job-desc">Orbit builds tools that help small shops understand their stock. We want someone who enjoys React, cares about clean interfaces and has shipped something real.</div>
+
+  <form id="apply" onsubmit="window.__submits = (window.__submits || 0) + 1; return false;">
+    <h2>Personal details</h2>
+    <div class="row">
+      <div class="f"><label for="first">First name *</label><input id="first" name="first_name" type="text" required></div>
+      <div class="f"><label for="last">Last name *</label><input id="last" name="last_name" type="text" required></div>
+    </div>
+    <div class="f"><label for="email">Email *</label><input id="email" name="email" type="email" required></div>
+    <div class="row">
+      <div class="f"><label for="phone">Phone</label><input id="phone" name="phone" type="tel" data-controlled></div>
+      <div class="f"><label for="city">Current city</label><input id="city" name="city" type="text" data-controlled></div>
+    </div>
+    <div class="f"><label for="pw">Create a password</label><input id="pw" name="password" type="password"></div>
+
+    <!-- Traps: none of these are visible, so none may be read or filled. -->
+    <div class="honeypot"><label for="hp">Email</label><input id="hp" name="email_confirm" type="text"></div>
+    <input id="hidden-phone" name="phone_backup" type="text" aria-label="Phone number" style="display:none">
+    <input id="ghost" name="ghost_phone" type="text" aria-label="Mobile number" style="opacity:0">
+
+    <h2>Education</h2>
+    <div class="row">
+      <div class="f"><label for="degree">Highest degree</label>
+        <select id="degree" name="degree">
+          <option value="">Select…</option>
+          <option value="hs">High school</option>
+          <option value="btech">Bachelor of Technology (B.Tech)</option>
+          <option value="mtech">Master of Technology (M.Tech)</option>
+        </select>
+      </div>
+      <div class="f"><label for="grad">Graduation year</label><input id="grad" name="grad_year" type="number"></div>
+    </div>
+    <div class="f"><label for="college">College or university</label><input id="college" name="college" type="text"></div>
+
+    <h2>Links</h2>
+    <div class="row">
+      <div class="f"><label for="li">LinkedIn profile</label><input id="li" name="linkedin" type="url"></div>
+      <div class="f"><label for="gh">GitHub</label><input id="gh" name="github" type="url"></div>
+    </div>
+    <iframe id="extra" title="More about you"></iframe>
+
+    <h2>About the role</h2>
+    <fieldset>
+      <legend>Are you willing to relocate to Bengaluru?</legend>
+      <label class="opt"><input type="radio" name="relocate" value="yes"> Yes</label>
+      <label class="opt"><input type="radio" name="relocate" value="no"> No</label>
+    </fieldset>
+    <fieldset>
+      <legend>Which of these have you used in a real project?</legend>
+      <label class="opt"><input type="checkbox" name="skills[]" value="python"> Python</label>
+      <label class="opt"><input type="checkbox" name="skills[]" value="react"> React</label>
+      <label class="opt"><input type="checkbox" name="skills[]" value="go"> Go</label>
+      <label class="opt"><input type="checkbox" name="skills[]" value="rust"> Rust</label>
+    </fieldset>
+    <div class="row">
+      <div class="f"><label for="k8s">Years of experience with Kubernetes</label><input id="k8s" name="k8s_years" type="number"></div>
+      <div class="f"><label for="notice">Notice period</label><input id="notice" name="notice" type="text"></div>
+    </div>
+    <div class="f"><label for="why">Why do you want to join Orbit?</label><textarea id="why" name="why" rows="4"></textarea></div>
+    <div class="f upload"><label for="cv">Resume/CV</label><label for="cv" class="btn">Attach file</label><input id="cv" name="resume" type="file" accept=".pdf"></div>
+
+    <h2>Voluntary self-identification</h2>
+    <div class="f"><label for="gender">Gender</label>
+      <select id="gender" name="gender"><option value="">Select…</option><option>Female</option><option>Male</option><option>Prefer not to say</option></select>
+    </div>
+    <label class="opt"><input id="consent" type="checkbox" name="consent"> I agree to Orbit's privacy policy</label>
+    <br>
+    <button type="submit">Submit application</button>
+  </form>
+</div>
+<script>
+  // The iframe lives on another origin, like an embedded applicant tracker.
+  const other = location.hostname === '127.0.0.1' ? 'localhost' : '127.0.0.1';
+  document.getElementById('extra').src = `${location.protocol}//${other}:${location.port}/fixtures/frame.html`;
+
+  // Behave like a React controlled input: state only changes on input events,
+  // and a re-render puts the state back into the DOM.
+  const state = (window.__state = {});
+  document.querySelectorAll('[data-controlled]').forEach((el) => {
+    state[el.name] = '';
+    el.addEventListener('input', (e) => (state[el.name] = e.target.value));
+  });
+  setInterval(() => {
+    document.querySelectorAll('[data-controlled]').forEach((el) => {
+      if (el.value !== state[el.name]) el.value = state[el.name];
+    });
+  }, 40);
+</script>
+</body>
+</html>
