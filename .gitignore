@@ -1,0 +1,15 @@
+# Personal data never belongs in this repo
+*.pdf
+*.docx
+profile*.json
+.env
+.env.*
+
+# Tooling
+node_modules/
+dist/
+build/
+.venv/
+__pycache__/
+.DS_Store
+Thumbs.db
