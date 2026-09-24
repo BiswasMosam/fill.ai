@@ -100,7 +100,7 @@ function decide(field, answer, knowledge, resumeOnFile) {
       value: traced ? shaped.value : '',
       values: traced ? shaped.values : [],
       sources: traced ? sources : [],
-      note: guard === 'consent' ? 'Your call. fill.ai never agrees to anything for you.' : 'Personal question. fill.ai never fills these on its own.',
+      note: guard === 'consent' ? 'Your call. Fill.ai never agrees to anything for you.' : 'Personal question. Fill.ai never fills these on its own.',
     };
   }
 
@@ -165,7 +165,7 @@ function shape(field, value, values, resumeOnFile) {
     if (i === -1) return { error: value ? `"${value}" is not one of the options.` : 'No option was chosen.' };
     return { value: field.options[i], values: [] };
   }
-  if (!TEXTUAL.has(kind)) return { error: 'fill.ai cannot fill this kind of field yet.' };
+  if (!TEXTUAL.has(kind)) return { error: 'Fill.ai cannot fill this kind of field yet.' };
   if (!value) return { error: 'Empty answer.' };
   if (kind === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(value)) return { error: 'Needs a full date.' };
   if (kind === 'month' && !/^\d{4}-\d{2}$/.test(value)) return { error: 'Needs a month and year.' };

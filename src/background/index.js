@@ -1,4 +1,4 @@
-// fill.ai service worker. It runs the loop the panel asks for: read every
+// Fill.ai service worker. It runs the loop the panel asks for: read every
 // frame of the tab, ask the chosen AI, check the answers, fill what passed, report.
 // It holds no state between messages; the panel keeps the picture.
 
@@ -33,7 +33,7 @@ async function openPanel(tab) {
   } catch {
     chrome.action.setBadgeBackgroundColor({ tabId: tab.id, color: '#f5b544' });
     chrome.action.setBadgeText({ tabId: tab.id, text: '!' });
-    chrome.action.setTitle({ tabId: tab.id, title: "fill.ai can't run on this page. Browser pages and the Chrome Web Store are off limits." });
+    chrome.action.setTitle({ tabId: tab.id, title: "Fill.ai can't run on this page. Browser pages and the Chrome Web Store are off limits." });
     setTimeout(() => chrome.action.setBadgeText({ tabId: tab.id, text: '' }).catch(() => {}), 4000);
   }
 }

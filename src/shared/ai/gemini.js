@@ -33,7 +33,7 @@ function modelOf(settings) {
 }
 
 function headers(settings) {
-  if (!settings.geminiKey) throw new FillError('no-key', 'Add your Gemini API key in fill.ai settings first.');
+  if (!settings.geminiKey) throw new FillError('no-key', 'Add your Gemini API key in Fill.ai settings first.');
   return { 'content-type': 'application/json', 'x-goog-api-key': settings.geminiKey };
 }
 
@@ -140,9 +140,9 @@ async function errorOf(res) {
 
 function toFillError(status, err, model) {
   const msg = err?.message || '';
-  if (/api key/i.test(msg) || status === 401 || err?.status === 'UNAUTHENTICATED') return new FillError('bad-key', 'Your Gemini API key was rejected. Check it in fill.ai settings.');
+  if (/api key/i.test(msg) || status === 401 || err?.status === 'UNAUTHENTICATED') return new FillError('bad-key', 'Your Gemini API key was rejected. Check it in Fill.ai settings.');
   if (status === 403) return new FillError('forbidden', `This key can't use ${model}. ${msg}`.trim());
-  if (status === 404) return new FillError('no-model', `Gemini has no model called ${model}. Pick another in fill.ai settings.`);
+  if (status === 404) return new FillError('no-model', `Gemini has no model called ${model}. Pick another in Fill.ai settings.`);
   if (status === 429) return new FillError('rate-limit', "You've reached Gemini's free limit for now. Wait a minute, or until tomorrow if the day's requests are used up.");
   if (status === 500 || status === 503) return new FillError('busy', 'Gemini is busy right now. Try again in a minute.');
   return new FillError('api', `Gemini error ${status}: ${msg}`);

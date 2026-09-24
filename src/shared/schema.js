@@ -1,4 +1,4 @@
-// The shape of a fill.ai profile. The same object is the JSON schema Claude
+// The shape of a Fill.ai profile. The same object is the JSON schema Claude
 // must follow when it reads a resume, and the blueprint the profile editor
 // renders from. User-saved answers live next to it in `facts`, never in here.
 

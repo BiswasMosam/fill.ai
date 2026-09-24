@@ -1,4 +1,4 @@
-// Everything fill.ai remembers lives in chrome.storage.local on this machine.
+// Everything Fill.ai remembers lives in chrome.storage.local on this machine.
 // Nothing is synced and nothing leaves the browser except the parts of the
 // profile sent to the chosen AI while a form is being filled (and with the
 // local model, not even that).

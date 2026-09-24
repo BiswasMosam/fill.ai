@@ -1,6 +1,6 @@
 # Every push to master: run the unit tests, build the extension, publish it
 # as a GitHub Release (fill-ai.zip), and publish the download page to GitHub
-# Pages, which serves it at www.mosambiswas.com/fill.ai/.
+# Pages, which serves it at www.mosambiswas.com/Fill.ai/.
 #
 # The page's Download button points at releases/latest/download/fill-ai.zip,
 # so it always hands out the newest build. Bump "version" in
@@ -47,8 +47,8 @@ jobs:
           else
             gh release create "$TAG" release/fill-ai.zip \
               --target "$GITHUB_SHA" --latest \
-              --title "fill.ai $VERSION" \
-              --notes "Install steps: https://www.mosambiswas.com/fill.ai/#install"
+              --title "Fill.ai $VERSION" \
+              --notes "Install steps: https://www.mosambiswas.com/Fill.ai/#install"
           fi
 
       - uses: actions/upload-pages-artifact@v5

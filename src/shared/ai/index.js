@@ -1,4 +1,4 @@
-// fill.ai can think with three AIs. Everything outside this folder calls
+// Fill.ai can think with three AIs. Everything outside this folder calls
 // `askJson` and never needs to know which one is answering.
 //
 //   ollama  a model on this computer. Free, private, the default.

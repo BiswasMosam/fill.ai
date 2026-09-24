@@ -1,4 +1,4 @@
-// Injected into every frame of the tab when fill.ai is opened. Exposes a small
+// Injected into every frame of the tab when Fill.ai is opened. Exposes a small
 // API on the extension's isolated-world `window` for the background to call
 // through chrome.scripting, and owns the panel in the top frame.
 

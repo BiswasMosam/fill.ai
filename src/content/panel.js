@@ -1,4 +1,4 @@
-// The floating fill.ai panel. Lives in the top frame inside a shadow root so
+// The floating Fill.ai panel. Lives in the top frame inside a shadow root so
 // the page's CSS can't touch it (and, outside tests, the page's scripts
 // can't read or click it either).
 
@@ -21,7 +21,7 @@ export function logo(size) {
 const STEPS = [
   ['reading', 'Reading the form'],
   ['thinking', 'Matching it with your profile'],
-  ['filling', 'Filling in what fill.ai knows'],
+  ['filling', 'Filling in what Fill.ai knows'],
 ];
 
 // Kinds that take typed text even when they carry options (none do today,
@@ -51,9 +51,9 @@ export class Panel {
     this.wrap = document.createElement('div');
     this.wrap.className = 'wrap';
     this.wrap.innerHTML = `
-      <section class="panel" role="dialog" aria-label="fill.ai" hidden>
+      <section class="panel" role="dialog" aria-label="Fill.ai" hidden>
         <header class="bar">
-          <div class="brand">${logo()}<span>fill.ai</span></div>
+          <div class="brand">${logo()}<span>Fill.ai</span></div>
           <div class="site">${h(location.hostname.replace(/^www\./, ''))}</div>
           <button class="icon" data-act="min" title="Shrink" aria-label="Shrink">&#8211;</button>
           <button class="icon" data-act="close" title="Close" aria-label="Close">&#215;</button>
@@ -61,7 +61,7 @@ export class Panel {
         <div class="body"></div>
         <footer class="foot"><span class="grow meta">Never submits. You check, then you submit.</span><button class="link" data-act="rescan">Rescan</button></footer>
       </section>
-      <button class="pill" data-act="restore" aria-label="Open fill.ai" hidden>${logo()}<span class="badge" hidden></span></button>`;
+      <button class="pill" data-act="restore" aria-label="Open Fill.ai" hidden>${logo()}<span class="badge" hidden></span></button>`;
     this.root.append(style, this.wrap);
     this.panel = this.wrap.querySelector('.panel');
     this.body = this.wrap.querySelector('.body');
@@ -187,7 +187,7 @@ export class Panel {
     this.port.onMessage.addListener((msg) => this.onMessage(msg));
     this.port.onDisconnect.addListener(() => {
       this.port = null;
-      if (this.state.view === 'working') this.fail('fill.ai was interrupted. Try again.');
+      if (this.state.view === 'working') this.fail('Fill.ai was interrupted. Try again.');
     });
     return this.port;
   }
@@ -200,7 +200,7 @@ export class Panel {
       try {
         this.connect().postMessage(msg);
       } catch {
-        this.fail('fill.ai was updated or restarted. Reload this page and try again.');
+        this.fail('Fill.ai was updated or restarted. Reload this page and try again.');
       }
     }
   }
@@ -413,8 +413,8 @@ export class Panel {
     const needs = [missing.includes('ai') && 'an AI to answer with', missing.includes('profile') && 'your resume'].filter(Boolean).join(' and ');
     return `<div class="hero">${logo(48)}
       <h2>Let's set you up</h2>
-      <p>fill.ai needs ${h(needs || 'a little setup')} before it can fill forms for you. It takes about a minute.</p>
-      <button class="btn primary big" data-act="settings">Open fill.ai settings</button></div>`;
+      <p>Fill.ai needs ${h(needs || 'a little setup')} before it can fill forms for you. It takes about a minute.</p>
+      <button class="btn primary big" data-act="settings">Open Fill.ai settings</button></div>`;
   }
 
   viewWorking() {
@@ -439,7 +439,7 @@ export class Panel {
 
   viewEmpty() {
     const n = this.state.newFields;
-    return `<div class="hero"><h2>No form here yet</h2><p>fill.ai couldn't find any fields it can fill on this page. If the form is still loading, try again in a moment.</p>
+    return `<div class="hero"><h2>No form here yet</h2><p>Fill.ai couldn't find any fields it can fill on this page. If the form is still loading, try again in a moment.</p>
       <button class="btn primary" data-act="rescan">${n ? `Fill ${n} new field${n === 1 ? '' : 's'}` : 'Look again'}</button></div>`;
   }
 

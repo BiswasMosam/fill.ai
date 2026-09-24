@@ -1,6 +1,6 @@
 {
   "name": "fill-ai",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "description": "An AI that learns who you are once, then reads any form and fills it for you.",
   "type": "module",

@@ -1,22 +1,22 @@
-# fill.ai
+# Fill.ai
 
 **Forms, filled by an AI that actually knows you.**
 
-Job applications, college portals, Google Forms: every one asks the same things in a slightly different layout. fill.ai reads your resume once, remembers you, and from then on fills forms for you. It fills what it knows, asks you about what it doesn't, and never presses submit.
+Job applications, college portals, Google Forms: every one asks the same things in a slightly different layout. Fill.ai reads your resume once, remembers you, and from then on fills forms for you. It fills what it knows, asks you about what it doesn't, and never presses submit.
 
 It runs free on your own computer by default. Nothing about you has to leave it.
 
-![fill.ai filling a job application with a local model](docs/panel.png)
+![Fill.ai filling a job application with a local model](docs/panel.png)
 
 <sub>Every screenshot here uses a made-up test profile. The one above is a real run of the local model on a laptop GPU.</sub>
 
 ## What it does
 
 1. **Teach it once.** Drop in your resume PDF, add your portfolio or LinkedIn link and anything else you like. The AI reads it all and builds a structured profile: education, experience, projects, skills, links, contact details. You can see and edit every line.
-2. **Open any form** and press <kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>F</kbd> (or click the fill.ai icon). A small panel appears in the corner. Drag it anywhere, or shrink it to a button.
+2. **Open any form** and press <kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>F</kbd> (or click the Fill.ai icon). A small panel appears in the corner. Drag it anywhere, or shrink it to a button.
 3. **It reads the form and fills what it knows.** Names, email, phone, links, degree, college, graduation year, skills checkboxes, dropdowns, even the resume upload.
 4. **It asks about the rest.** Each field it couldn't answer gets a card. Answer it and choose **Fill once**, or **Save & fill** to remember the answer for every future form.
-5. **You check, then you submit.** fill.ai never submits anything.
+5. **You check, then you submit.** Fill.ai never submits anything.
 
 | Google Forms | Shrinks out of the way |
 | --- | --- |
@@ -44,30 +44,30 @@ Pick one on the settings page. You can switch any time; your profile stays.
 
 ## How it stays honest
 
-An AI that fills forms for you is only useful if it never makes things up. fill.ai does not rely on the model behaving; the code checks every answer before it touches the page, whichever AI gave it.
+An AI that fills forms for you is only useful if it never makes things up. Fill.ai does not rely on the model behaving; the code checks every answer before it touches the page, whichever AI gave it.
 
 - **Every answer must cite your profile.** The model has to name where each answer came from (`education[0].institution`, a saved answer, ...). If the citation points at nothing, the answer is thrown away and the field goes to *Needs you*. The panel shows the source under each filled field. The one exception is attaching your saved resume to a field labelled resume or CV: the file is its own evidence.
 - **Checkable facts are checked.** An email must be one that is actually in your profile, a phone number must match yours digit for digit, and a dropdown answer must be one of the real options.
 - **Personal questions are always yours.** Gender, ethnicity, caste, religion, disability, veteran status and ID numbers are never filled automatically, whatever the model says.
 - **Agreements are always yours.** Terms, privacy policies, arbitration and "I certify" boxes are never ticked for you.
 - **Some things are never read at all.** Passwords, OTPs, captchas and card or bank details are skipped before anything is sent to the AI.
-- **Hidden fields are ignored.** A form can hide a "phone" field to harvest autofill data. fill.ai only reads fields a person can actually see.
+- **Hidden fields are ignored.** A form can hide a "phone" field to harvest autofill data. Fill.ai only reads fields a person can actually see.
 - **Drafts are drafts.** Open questions such as "Why do you want to join us?" get a draft written from your profile, shown in the panel, and inserted only when you click *Insert*.
 
 ## Install
 
-**[Download fill.ai from www.mosambiswas.com/fill.ai](https://www.mosambiswas.com/fill.ai/)**, where the steps are shown with pictures.
+**[Download Fill.ai from www.mosambiswas.com/Fill.ai](https://www.mosambiswas.com/Fill.ai/)**, where the steps are shown with pictures.
 
-fill.ai is a Chrome extension (it also works in Edge, Brave and other Chromium browsers). It is not on the Chrome Web Store yet, so Chrome needs you to load it yourself, once:
+Fill.ai is a Chrome extension (it also works in Edge, Brave and other Chromium browsers). It is not on the Chrome Web Store yet, so Chrome needs you to load it yourself, once:
 
-1. Download [`fill-ai.zip`](https://github.com/BiswasMosam/fill.ai/releases/latest/download/fill-ai.zip) and unzip it somewhere it can stay (Chrome runs fill.ai from that folder).
+1. Download [`fill-ai.zip`](https://github.com/BiswasMosam/Fill.ai/releases/latest/download/fill-ai.zip) and unzip it somewhere it can stay (Chrome runs Fill.ai from that folder).
 2. Open `chrome://extensions`, switch on **Developer mode** and click **Load unpacked**. Choose the unzipped folder, the one with `manifest.json` inside. The settings page opens.
 3. Choose the AI.
-   - **On this computer:** install [Ollama](https://ollama.com/download), open it, and run `ollama pull qwen3.5:4b` once in a terminal. Press **Check again** and fill.ai finds it and picks the model. There is no `OLLAMA_ORIGINS` to set: fill.ai handles Ollama's block on browser extensions itself.
+   - **On this computer:** install [Ollama](https://ollama.com/download), open it, and run `ollama pull qwen3.5:4b` once in a terminal. Press **Check again** and Fill.ai finds it and picks the model. There is no `OLLAMA_ORIGINS` to set: Fill.ai handles Ollama's block on browser extensions itself.
    - **Gemini** or **Claude:** paste your key and press **Save and test**.
 4. Drop your resume into step 2 and press **Build my profile**. Check the result in *Your profile* and fix anything that is off.
 
-To update, download the zip again, unzip it into the same folder replacing the files, and press the reload arrow on fill.ai in `chrome://extensions`. Your profile stays.
+To update, download the zip again, unzip it into the same folder replacing the files, and press the reload arrow on Fill.ai in `chrome://extensions`. Your profile stays.
 
 ## What goes where
 
@@ -104,7 +104,7 @@ Local models and Gemini's free tier cost nothing; the panel shows which model an
 - `src/content/fill.js` fills fields the way a person would, so React, Angular and Google Forms all register the change, then reads every value back. Anything that doesn't stick goes to *Needs you*.
 - `src/shared/matcher.js` is the gatekeeper between the AI and the page: citations, option matching, format checks and the personal-question guards (`src/shared/sensitive.js`).
 - `src/shared/ai/` is the only code that talks to an AI. Every provider takes the same prompt and JSON schema and gives back the same shape, so nothing else knows which one answered.
-  - `ollama.js` streams from Ollama with the schema as `format`, and sizes the context window to fit each prompt, since Ollama otherwise cuts long prompts silently. Ollama refuses requests from `chrome-extension://` origins unless `OLLAMA_ORIGINS` is set, so a `declarativeNetRequest` rule removes the Origin header from fill.ai's own requests to the Ollama address, and nobody else's.
+  - `ollama.js` streams from Ollama with the schema as `format`, and sizes the context window to fit each prompt, since Ollama otherwise cuts long prompts silently. Ollama refuses requests from `chrome-extension://` origins unless `OLLAMA_ORIGINS` is set, so a `declarativeNetRequest` rule removes the Origin header from Fill.ai's own requests to the Ollama address, and nobody else's.
   - `gemini.js` streams `streamGenerateContent` with `responseJsonSchema`. The key goes in a header, never the URL.
   - `claude.js` uses `claude-opus-5` with strict JSON output, and `fallbacks: "default"` so a declined request is retried on Anthropic's recommended fallback model instead of failing.
 - `src/options/pdf-text.js` turns a resume PDF into text with pdf.js for local models, in the browser. It recovers link targets hidden behind words like "LinkedIn", rejoins letter-spaced capitals ("M O S A M" becomes "MOSAM") and keeps columns apart so a big name beside an email isn't read as one phrase.
@@ -115,7 +115,7 @@ Local models and Gemini's free tier cost nothing; the panel shows which model an
 
 Build from source instead of downloading: `npm install && npm run build`, then load the `dist` folder the same way.
 
-Every push to `master` publishes itself (`.github/workflows/publish.yml`): the unit tests run, the extension is built and zipped, the zip becomes a GitHub Release named after the version in `static/manifest.json`, and the download page in `site/` goes to GitHub Pages at [www.mosambiswas.com/fill.ai](https://www.mosambiswas.com/fill.ai/). Bump the version for a new release; a push without a bump replaces the zip in the current one. The Download button always points at the latest release.
+Every push to `master` publishes itself (`.github/workflows/publish.yml`): the unit tests run, the extension is built and zipped, the zip becomes a GitHub Release named after the version in `static/manifest.json`, and the download page in `site/` goes to GitHub Pages at [www.mosambiswas.com/Fill.ai](https://www.mosambiswas.com/Fill.ai/). Bump the version for a new release; a push without a bump replaces the zip in the current one. The Download button always points at the latest release.
 
 ```bash
 npm run site     # what the workflow builds: release/fill-ai.zip and the page in _site/
@@ -140,14 +140,14 @@ The end-to-end suite runs 92 checks against the real extension: a job applicatio
 
 - A 4B local model follows instructions less closely than Gemini or Claude. It may keep a resume's all-capital styling or add a detail your resume doesn't state, so check the profile once after building it.
 - Scanned (image-only) PDFs have no text for a local model to read. Paste the text under *Anything else*, or use Gemini for that step.
-- Workday and other step-by-step portals that reload the page between steps: reopen fill.ai on each step.
+- Workday and other step-by-step portals that reload the page between steps: reopen Fill.ai on each step.
 - Date pickers that only accept clicks on a calendar.
 - Only PDF resumes can be attached to upload fields.
 
 ## Roadmap
 
 - Chrome Web Store release
-- Remembering which answers you changed after fill.ai filled them, and learning from it
+- Remembering which answers you changed after Fill.ai filled them, and learning from it
 
 ## License
 

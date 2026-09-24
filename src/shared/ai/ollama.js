@@ -7,7 +7,7 @@
 // - Ollama answers 403 to any request whose Origin is chrome-extension://
 //   unless OLLAMA_ORIGINS is set. Instead of asking every friend to set an
 //   environment variable, a declarativeNetRequest rule drops that header on
-//   fill.ai's own requests to the Ollama address, and nobody else's.
+//   Fill.ai's own requests to the Ollama address, and nobody else's.
 // - Ollama's context window defaults to a few thousand tokens and silently
 //   cuts what doesn't fit, which would drop half the profile. Every request
 //   sets num_ctx to fit the prompt, and refuses when it can't.
@@ -70,7 +70,7 @@ async function call(settings, path, { body, signal, method = body ? 'POST' : 'GE
     throw new FillError('offline', `Ollama isn't answering at ${base}. Start Ollama and try again.`);
   }
   if (res.status === 403) {
-    throw new FillError('forbidden', 'Ollama turned fill.ai away. Set OLLAMA_ORIGINS to chrome-extension://* and restart Ollama.');
+    throw new FillError('forbidden', 'Ollama turned Fill.ai away. Set OLLAMA_ORIGINS to chrome-extension://* and restart Ollama.');
   }
   if (!res.ok) {
     const msg = (await res.json().catch(() => null))?.error || `HTTP ${res.status}`;
@@ -126,7 +126,7 @@ const THINK = { low: false, medium: false, high: true };
 
 export async function askJson({ settings, system, content, schema, effort, maxTokens = 16000, onText, signal }) {
   const model = settings.ollamaModel;
-  if (!model) throw new FillError('no-model', 'Choose a local model in fill.ai settings first.');
+  if (!model) throw new FillError('no-model', 'Choose a local model in Fill.ai settings first.');
   const info = await modelInfo(settings, model);
   const { text, images } = flatten(content, info.capabilities.includes('vision'));
   const think = info.capabilities.includes('thinking') && THINK[effort || 'high'];

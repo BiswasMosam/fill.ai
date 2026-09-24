@@ -147,7 +147,7 @@ function json(res, status, body) {
 
 function handleOllama(req, res, url, payload) {
   // Real Ollama refuses browser extensions unless OLLAMA_ORIGINS says
-  // otherwise. fill.ai must get past this without anyone setting it.
+  // otherwise. Fill.ai must get past this without anyone setting it.
   if (String(req.headers.origin || '').startsWith('chrome-extension://')) {
     res.writeHead(403);
     return res.end();

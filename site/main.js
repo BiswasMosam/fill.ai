@@ -1,4 +1,4 @@
-// fill.ai download page: copy buttons, a note for browsers that can't run
+// Fill.ai download page: copy buttons, a note for browsers that can't run
 // the extension, and sections that ease in as they scroll into view.
 
 document.querySelectorAll('[data-copy]').forEach((btn) => {
@@ -14,7 +14,7 @@ document.querySelectorAll('[data-copy]').forEach((btn) => {
   });
 });
 
-// Chrome, Edge and Brave on a computer can load fill.ai. Everything else
+// Chrome, Edge and Brave on a computer can load Fill.ai. Everything else
 // (phones, Firefox, Safari) gets told so before downloading a zip it can't use.
 const ua = navigator.userAgentData;
 const chromium = !!ua?.brands?.some((b) => /Chromium|Google Chrome|Microsoft Edge|Brave/.test(b.brand));

@@ -45,6 +45,6 @@ export function parseJson(text, who) {
         return JSON.parse(text.slice(a, b + 1));
       } catch {}
     }
-    throw new FillError('bad-json', `${who} sent back something fill.ai could not read. Try again.`);
+    throw new FillError('bad-json', `${who} sent back something Fill.ai could not read. Try again.`);
   }
 }

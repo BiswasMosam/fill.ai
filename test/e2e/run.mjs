@@ -324,7 +324,7 @@ try {
   check('open question left as a draft', g.more === '');
   await gf.screenshot({ path: path.join(OUT, '4-gforms-panel.png') });
 
-  await sleep(800); // fill.ai holds the scroll position for a moment after filling
+  await sleep(800); // Fill.ai holds the scroll position for a moment after filling
   await gf.click('#next');
   await waitPanel(gf, '.banner');
   check('new questions noticed after Next', /2 new questions/.test(await panelText(gf)), (await panelText(gf)).slice(0, 200));

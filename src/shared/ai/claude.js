@@ -19,7 +19,7 @@ export function isConnected(settings) {
 }
 
 function makeClient({ claudeKey, claudeBaseURL }) {
-  if (!claudeKey) throw new FillError('no-key', 'Add your Claude API key in fill.ai settings first.');
+  if (!claudeKey) throw new FillError('no-key', 'Add your Claude API key in Fill.ai settings first.');
   return new Anthropic({
     apiKey: claudeKey,
     baseURL: claudeBaseURL || undefined,
@@ -66,7 +66,7 @@ export async function askJson({ settings, system, content, schema, effort, maxTo
   try {
     return { data: JSON.parse(text), cost: estimateCost(message.usage), via: 'Claude Opus 5' };
   } catch {
-    throw new FillError('bad-json', 'Claude sent back something fill.ai could not read. Try again.');
+    throw new FillError('bad-json', 'Claude sent back something Fill.ai could not read. Try again.');
   }
 }
 
@@ -87,7 +87,7 @@ export async function test(settings) {
 
 function toFillError(err) {
   if (err instanceof FillError) return err;
-  if (err instanceof Anthropic.AuthenticationError) return new FillError('bad-key', 'Your Claude API key was rejected. Check it in fill.ai settings.');
+  if (err instanceof Anthropic.AuthenticationError) return new FillError('bad-key', 'Your Claude API key was rejected. Check it in Fill.ai settings.');
   if (err instanceof Anthropic.PermissionDeniedError) return new FillError('forbidden', 'This API key is not allowed to use Claude Opus 5.');
   if (err instanceof Anthropic.RateLimitError) return new FillError('rate-limit', 'Too many requests right now. Wait a moment and try again.');
   if (err instanceof Anthropic.BadRequestError) {

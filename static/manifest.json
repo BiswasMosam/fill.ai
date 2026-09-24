@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "fill.ai",
-  "version": "0.2.0",
+  "name": "Fill.ai",
+  "version": "0.2.1",
   "description": "Learns who you are once, then reads any form and fills it for you. Never submits on its own.",
   "icons": {
     "16": "icons/icon16.png",
@@ -10,7 +10,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_title": "fill.ai: fill this form (Alt+Shift+F)",
+    "default_title": "Fill.ai: fill this form (Alt+Shift+F)",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png"
@@ -23,7 +23,7 @@
   "commands": {
     "_execute_action": {
       "suggested_key": { "default": "Alt+Shift+F" },
-      "description": "Open fill.ai on this page"
+      "description": "Open Fill.ai on this page"
     }
   },
   "minimum_chrome_version": "116"

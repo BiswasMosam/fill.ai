@@ -1,4 +1,4 @@
-// Try fill.ai on a real website with the mock AI. Nothing is ever submitted:
+// Try Fill.ai on a real website with the mock AI. Nothing is ever submitted:
 // the extension never presses submit, and this script closes the browser.
 //   node build.mjs --test && node test/e2e/live-probe.mjs <url> [name]
 

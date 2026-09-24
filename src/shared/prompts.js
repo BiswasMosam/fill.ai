@@ -71,7 +71,7 @@ export function formUserContent({ fields, page, resumeOnFile }) {
   return [{ type: 'text', text: `Here is the form to fill.\n\n<form>\n${JSON.stringify(form, null, 1)}\n</form>` }];
 }
 
-export const PROFILE_SYSTEM = `You turn a person's documents (resume, portfolio, LinkedIn text, notes) into a structured profile. fill.ai will use it for the rest of their life to fill forms for them, so accuracy matters more than completeness.
+export const PROFILE_SYSTEM = `You turn a person's documents (resume, portfolio, LinkedIn text, notes) into a structured profile. Fill.ai will use it for the rest of their life to fill forms for them, so accuracy matters more than completeness.
 
 - Record only what the documents state. Don't infer, embellish or fill gaps. Anything missing stays an empty string or an empty list.
 - Keep their own wording for achievements and descriptions. Only tidy formatting noise such as stray bullets or broken line wraps.

@@ -1,4 +1,4 @@
-// Renders the fill.ai logo to the PNG sizes Chrome wants, using the local
+// Renders the Fill.ai logo to the PNG sizes Chrome wants, using the local
 // Chrome in headless mode. Run once after changing the logo:
 //   node scripts/icons.mjs
 import puppeteer from 'puppeteer-core';

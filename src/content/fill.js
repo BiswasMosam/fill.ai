@@ -6,7 +6,7 @@ import { entry, isOn } from './scan.js';
 import { clean, matchOption, norm } from '../shared/text.js';
 import { closePopup, controlText, keepScroll, openOptions, optionText, realClick, sleep, visibleOptions, waitFor } from './dom.js';
 
-const snapshots = new Map(); // id -> how the field looked before fill.ai touched it
+const snapshots = new Map(); // id -> how the field looked before Fill.ai touched it
 
 // ---------------------------------------------------------------- primitives
 
@@ -90,7 +90,7 @@ async function fillCombobox(el, wanted) {
 
 async function attachResume(el) {
   const { resumeFile } = await chrome.storage.local.get('resumeFile');
-  if (!resumeFile?.data) return 'No resume file saved in fill.ai.';
+  if (!resumeFile?.data) return 'No resume file saved in Fill.ai.';
   const bytes = Uint8Array.from(atob(resumeFile.data), (c) => c.charCodeAt(0));
   const file = new File([bytes], resumeFile.name || 'resume.pdf', { type: resumeFile.type || 'application/pdf' });
   const dt = new DataTransfer();

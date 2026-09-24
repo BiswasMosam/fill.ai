@@ -1,5 +1,5 @@
-// fill.ai settings and profile page: choose the AI, build the profile from
-// documents, edit what fill.ai knows, manage saved answers and data.
+// Fill.ai settings and profile page: choose the AI, build the profile from
+// documents, edit what Fill.ai knows, manage saved answers and data.
 
 import { LONG_TEXT, PROFILE_SCHEMA, SECTION_TITLES, conform, emptyFrom, isProfileEmpty } from '../shared/schema.js';
 import {
@@ -248,7 +248,7 @@ const ACCEPT = /\.(pdf|txt|md|png|jpe?g|webp)$/i;
 async function addFiles(list) {
   for (const file of list) {
     if (!ACCEPT.test(file.name)) {
-      toast(`${file.name}: fill.ai reads PDF, text and image files. Save Word files as PDF first.`);
+      toast(`${file.name}: Fill.ai reads PDF, text and image files. Save Word files as PDF first.`);
       continue;
     }
     if (file.size > 20e6) {
@@ -352,7 +352,7 @@ async function build() {
         try {
           text = await pdfText(f.data);
         } catch (err) {
-          console.warn('fill.ai: could not read', f.name, err);
+          console.warn('Fill.ai: could not read', f.name, err);
         }
         if (text.replace(/\s/g, '').length < 40) {
           toast(`${f.name} has almost no text in it, maybe a scan. Paste its text under "Anything else", or use Gemini for this step.`);
@@ -636,7 +636,7 @@ function initData() {
     if (!file) return;
     try {
       const data = JSON.parse(await file.text());
-      if (!data.profile) throw new Error('This is not a fill.ai export.');
+      if (!data.profile) throw new Error('This is not a Fill.ai export.');
       if (!confirm('Replace your profile and saved answers with this file?')) return;
       await saveProfile(conform(data.profile));
       if (Array.isArray(data.facts)) await saveFacts(data.facts.filter((f) => f && typeof f.question === 'string' && typeof f.answer === 'string'));

@@ -4,7 +4,7 @@
 //   release/fill-ai.zip   the production build, files at the top level so
 //                         "Extract All" gives a folder Chrome can load as is
 //   _site/                the download page, published by GitHub Pages at
-//                         www.mosambiswas.com/fill.ai/
+//                         www.mosambiswas.com/Fill.ai/
 //
 // The zip itself is published as a GitHub Release, not inside _site: the
 // portfolio's service worker controls every path on mosambiswas.com and
@@ -53,4 +53,4 @@ const html = readFileSync('_site/index.html', 'utf8').replaceAll('{{VERSION}}', 
 if (/\{\{\w+\}\}/.test(html)) throw new Error(`Unfilled placeholder in site/index.html: ${html.match(/\{\{\w+\}\}/)[0]}`);
 writeFileSync('_site/index.html', html);
 
-console.log(`fill.ai ${version}: release/fill-ai.zip (${mb} MB, ${Object.keys(files).length} files) and _site/`);
+console.log(`Fill.ai ${version}: release/fill-ai.zip (${mb} MB, ${Object.keys(files).length} files) and _site/`);
