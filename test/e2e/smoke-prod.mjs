@@ -22,7 +22,7 @@ try {
       await chrome.storage.local.clear();
       await chrome.storage.local.set(cfg);
     },
-    { settings: { apiKey: 'test-key', baseURL: BASE }, profile: PROFILE, facts: [] },
+    { settings: { provider: 'ollama', ollamaURL: BASE, ollamaModel: 'qwen3.5:4b' }, profile: PROFILE, facts: [] },
   );
   const page = await browser.newPage();
   await page.goto(`${BASE}/fixtures/job-form.html?smoke`);

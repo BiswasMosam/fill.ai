@@ -107,6 +107,14 @@ test('a resume upload needs a saved file', () => {
   assert.equal(run([field], [a('0:f1', 'fill', 'resume', { sources: ['basics.full_name'] })], { resumeOnFile: false })[0].status, 'ask');
 });
 
+test('the resume file is its own evidence, but only where the label asks for one', () => {
+  const [d] = run([f('0:f1', 'file', 'Resume/CV')], [a('0:f1', 'fill', 'resume')]);
+  assert.equal(d.status, 'fill');
+  assert.equal(d.sources[0].label, 'Your resume file');
+  assert.equal(run([f('0:f1', 'file', 'Upload your transcript')], [a('0:f1', 'fill', 'resume')])[0].status, 'ask');
+  assert.equal(run([f('0:f1', 'file', 'Resume/CV')], [a('0:f1', 'fill', 'resume')], { resumeOnFile: false })[0].status, 'ask');
+});
+
 test('an already correct value is kept, not refilled', () => {
   const [d] = run([f('0:f1', 'text', 'City', { current: 'Pune' })], [a('0:f1', 'fill', 'Pune', { sources: ['basics.location.city'] })]);
   assert.equal(d.status, 'keep');

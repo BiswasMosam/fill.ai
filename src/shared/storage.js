@@ -1,13 +1,20 @@
 // Everything fill.ai remembers lives in chrome.storage.local on this machine.
 // Nothing is synced and nothing leaves the browser except the parts of the
-// profile sent to Claude while a form is being filled.
+// profile sent to the chosen AI while a form is being filled (and with the
+// local model, not even that).
 
 import { conform, emptyProfile } from './schema.js';
 
 export const DEFAULT_SETTINGS = {
-  apiKey: '',
+  provider: 'ollama', // ollama | gemini | claude
   effort: 'high', // low | medium | high, shown as Fast | Balanced | Careful
-  baseURL: '', // empty = Anthropic. Only the test harness points this elsewhere.
+  ollamaURL: 'http://localhost:11434',
+  ollamaModel: '',
+  geminiKey: '',
+  geminiModel: 'gemini-3.8-flash',
+  geminiBaseURL: '', // empty = Google. Only the test harness points this elsewhere.
+  claudeKey: '',
+  claudeBaseURL: '', // empty = Anthropic. Same.
 };
 
 const get = (keys) => chrome.storage.local.get(keys);
@@ -15,7 +22,18 @@ const set = (items) => chrome.storage.local.set(items);
 
 export async function getSettings() {
   const { settings } = await get('settings');
-  return { ...DEFAULT_SETTINGS, ...(settings || {}) };
+  const stored = settings || {};
+  const next = { ...DEFAULT_SETTINGS, ...stored };
+  // v0.1 knew only Claude, as apiKey and baseURL. Someone who set that up
+  // keeps using Claude until they choose otherwise.
+  if (stored.apiKey && !stored.claudeKey) {
+    next.claudeKey = stored.apiKey;
+    if (!stored.provider) next.provider = 'claude';
+  }
+  if (stored.baseURL && !stored.claudeBaseURL) next.claudeBaseURL = stored.baseURL;
+  delete next.apiKey;
+  delete next.baseURL;
+  return next;
 }
 
 export async function saveSettings(patch) {

@@ -1,25 +1,28 @@
-// The only place fill.ai talks to Claude.
+// Claude Opus 5 through the Anthropic API, with the person's own key. Paid,
+// and the most careful of the three.
 //
-// Claude Opus 5, adaptive thinking, strict JSON output. `fallbacks: "default"`
-// lets the API rerun a request on Anthropic's recommended model if Opus
-// declines it, instead of failing the whole form.
+// Adaptive thinking, strict JSON output. `fallbacks: "default"` lets the API
+// rerun a request on Anthropic's recommended model if Opus declines it,
+// instead of failing the whole form.
 
 import Anthropic from '@anthropic-ai/sdk';
+import { FillError } from './errors.js';
+import { estimateCost } from '../matcher.js';
 
+export const id = 'claude';
+export const name = 'Claude';
+export const readsPdf = true;
 export const MODEL = 'claude-opus-5';
 
-export class FillError extends Error {
-  constructor(code, message) {
-    super(message);
-    this.code = code;
-  }
+export function isConnected(settings) {
+  return !!settings.claudeKey;
 }
 
-export function makeClient({ apiKey, baseURL }) {
-  if (!apiKey) throw new FillError('no-key', 'Add your Claude API key in fill.ai settings first.');
+function makeClient({ claudeKey, claudeBaseURL }) {
+  if (!claudeKey) throw new FillError('no-key', 'Add your Claude API key in fill.ai settings first.');
   return new Anthropic({
-    apiKey,
-    baseURL: baseURL || undefined,
+    apiKey: claudeKey,
+    baseURL: claudeBaseURL || undefined,
     dangerouslyAllowBrowser: true, // the key is the user's own and stays in this extension
     maxRetries: 2,
   });
@@ -61,13 +64,13 @@ export async function askJson({ settings, system, content, schema, effort, maxTo
     .map((block) => block.text)
     .join('');
   try {
-    return { data: JSON.parse(text), usage: message.usage, model: message.model };
+    return { data: JSON.parse(text), cost: estimateCost(message.usage), via: 'Claude Opus 5' };
   } catch {
     throw new FillError('bad-json', 'Claude sent back something fill.ai could not read. Try again.');
   }
 }
 
-export async function testKey(settings) {
+export async function test(settings) {
   const client = makeClient(settings);
   try {
     await client.messages.create({
@@ -76,7 +79,7 @@ export async function testKey(settings) {
       output_config: { effort: 'low' },
       messages: [{ role: 'user', content: 'Reply with OK.' }],
     });
-    return true;
+    return { detail: 'Connected. Claude is ready.' };
   } catch (err) {
     throw toFillError(err);
   }

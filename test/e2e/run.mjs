@@ -1,6 +1,7 @@
 // End-to-end: loads the real extension (dist-test) into Chrome, points it at
-// the mock Claude server, and drives the panel on fixture forms the way a
-// person would. Run with `npm run e2e` (HEADFUL=1 to watch).
+// the mock AI server, and drives the panel on fixture forms the way a person
+// would. The main run uses the default AI (Ollama); Gemini and Claude answer
+// the same form once each. Run with `npm run e2e` (HEADFUL=1 to watch).
 
 import puppeteer from 'puppeteer-core';
 import path from 'node:path';
@@ -36,9 +37,10 @@ try {
   const sw = await swTarget.worker();
   const extId = new URL(swTarget.url()).host;
 
-  // A real PDF resume for the upload and profile-building paths.
+  // A real PDF resume for the upload and profile-building paths. The LinkedIn
+  // address exists only behind the link, as on most real resumes.
   const pdfPage = await browser.newPage();
-  await pdfPage.setContent('<h1>Asha Rani Verma</h1><p>asha.verma@example.com · +91 98765 43210 · Pune</p><h2>Education</h2><p>B.Tech, Example Institute of Technology, 2022 to 2026</p>');
+  await pdfPage.setContent('<h1>Asha Rani Verma</h1><p>asha.verma@example.com · +91 98765 43210 · Pune · <a href="https://www.linkedin.com/in/asha-verma">LinkedIn</a></p><h2>Education</h2><p>B.Tech, Example Institute of Technology, 2022 to 2026</p>');
   const pdfPath = path.join(OUT, 'Asha_Verma_Resume.pdf');
   await pdfPage.pdf({ path: pdfPath, format: 'A4' });
   await pdfPage.close();
@@ -49,9 +51,14 @@ try {
       await chrome.storage.local.clear();
       await chrome.storage.local.set(cfg);
     }, items);
-  const fullSeed = (extra = {}) =>
+  const AI = {
+    ollama: { provider: 'ollama', ollamaURL: BASE, ollamaModel: 'qwen3.5:4b' },
+    gemini: { provider: 'gemini', geminiKey: 'test-gemini-key', geminiBaseURL: BASE },
+    claude: { provider: 'claude', claudeKey: 'test-key', claudeBaseURL: BASE },
+  };
+  const fullSeed = (extra = {}, ai = 'ollama') =>
     seed({
-      settings: { apiKey: 'test-key', baseURL: BASE, effort: 'high' },
+      settings: { ...AI[ai], effort: 'high' },
       profile: PROFILE,
       facts: [],
       resumeFile: { name: 'Asha_Verma_Resume.pdf', type: 'application/pdf', size: 1000, data: pdfB64 },
@@ -85,6 +92,17 @@ try {
       what,
     );
   }
+  // The prompt and the form, read back out of whichever API was called.
+  const systemOf = (r) => (r.provider === 'ollama' ? r.body.messages?.[0]?.content : r.provider === 'gemini' ? r.body.systemInstruction?.parts?.[0]?.text : r.body.system?.[0]?.text) || '';
+  const userOf = (r) =>
+    r.provider === 'ollama'
+      ? r.body.messages.find((m) => m.role === 'user').content
+      : r.provider === 'gemini'
+        ? r.body.contents[0].parts.map((p) => p.text || '').join('')
+        : r.body.messages[0].content.map((c) => c.text || '').join('');
+  const formOf = (r) => JSON.parse(userOf(r).split('<form>\n')[1].split('\n</form>')[0]);
+  const formRequests = () => requests.filter((r) => systemOf(r).startsWith('You fill in web forms'));
+  const metaText = (page) => page.evaluate(() => document.querySelector('#fillai-root').shadowRoot.querySelector('.meta').textContent);
   const panelText = (page) => page.evaluate(() => document.querySelector('#fillai-root').shadowRoot.querySelector('.body').innerText);
   const panelAll = (page) => page.evaluate(() => document.querySelector('#fillai-root').shadowRoot.querySelector('.body').textContent);
   // A card or row in the panel, found by the question it is about.
@@ -177,16 +195,17 @@ try {
   const site = frame ? await frame.evaluate(() => document.getElementById('site').value) : null;
   check('field inside a cross-origin iframe filled', site === 'https://asha.example.dev', site);
 
-  const req = requests.find((r) => r.body.stream);
-  const sentLabels = req ? JSON.parse(req.body.messages[0].content[0].text.split('<form>\n')[1].split('\n</form>')[0]).fields.map((f) => f.label) : [];
-  check('request uses Claude Opus 5 with adaptive thinking', req?.body.model === 'claude-opus-5' && req?.body.thinking?.type === 'adaptive', req?.body.model);
-  check('request asks for strict JSON output', req?.body.output_config?.format?.type === 'json_schema');
-  check('request opts into server-side fallbacks', req?.body.fallbacks === 'default' && String(req?.headers['anthropic-beta']).includes('server-side-fallback-2026-07-01'), req?.headers['anthropic-beta']);
-  check('profile prompt is marked for caching', req?.body.system?.[0]?.cache_control?.type === 'ephemeral');
-  check('API key sent only as the x-api-key header', req?.headers['x-api-key'] === 'test-key');
-  check('password field never sent to Claude', !sentLabels.some((l) => /password/i.test(l)), sentLabels);
-  check('invisible trap fields never sent to Claude', sentLabels.filter((l) => /^(email|phone number|mobile number)$/i.test(l)).length === 1, sentLabels);
+  const req = formRequests()[0];
+  const sentLabels = req ? formOf(req).fields.map((f) => f.label) : [];
+  check('answered by the chosen local model', req?.provider === 'ollama' && req?.body.model === 'qwen3.5:4b', req?.body.model);
+  check('Ollama is asked for JSON in the answers schema', req?.body.format?.properties?.answers?.type === 'array');
+  check('context window sized to fit, temperature 0', req?.body.options?.num_ctx >= 8192 && req?.body.options?.temperature === 0, req?.body.options);
+  check('Careful turns thinking on for a thinking model', req?.body.think === true, req?.body.think);
+  check("extension Origin stripped, so Ollama's block never fires", req && req.headers.origin === undefined, req?.headers.origin);
+  check('password field never sent to the AI', !sentLabels.some((l) => /password/i.test(l)), sentLabels);
+  check('invisible trap fields never sent to the AI', sentLabels.filter((l) => /^(email|phone number|mobile number)$/i.test(l)).length === 1, sentLabels);
   check('iframe questions included in the same request', sentLabels.includes('Portfolio or personal website') && sentLabels.includes('Preferred way of working'), sentLabels);
+  check('panel says the answers came from this computer', /qwen3\.5:4b on this computer/.test(await metaText(page)), await metaText(page));
 
   let text = await panelText(page);
   check('panel shows the counts', /filled/.test(text) && /need/.test(text), text.slice(0, 120));
@@ -275,8 +294,8 @@ try {
   await waitPanel(again);
   await sleep(200);
   check('notice period filled from the saved answer', (await again.$eval('#notice', (e) => e.value)) === '30 days');
-  const lastReq = requests.filter((r) => r.body.stream).at(-1);
-  check('saved answers travel in the cached profile prompt', lastReq?.body.system[0].text.includes('"answer": "30 days"'));
+  const lastReq = formRequests().at(-1);
+  check('saved answers travel in the profile prompt', systemOf(lastReq ?? {}).includes('"answer": "30 days"'));
   text = await panelAll(again);
   check('panel credits the saved answer', /Saved answer · Notice period/.test(text));
   await again.close();
@@ -316,31 +335,66 @@ try {
   check('page two filled after "Fill them"', p2[0].includes('linkedin.com') && p2[1] === 'Example Institute of Technology', p2);
   await gf.screenshot({ path: path.join(OUT, '5-gforms-page2.png') });
 
-  // ------------------------------------------------------------------ 4. setup nudges
+  // ------------------------------------------------------------------ 4. the other two AIs
+  for (const ai of ['gemini', 'claude']) {
+    console.log(`\nSame form with ${ai === 'gemini' ? 'Gemini' : 'Claude'}`);
+    await fullSeed({}, ai);
+    requests.length = 0;
+    const p = await browser.newPage();
+    await p.goto(`${BASE}/fixtures/job-form.html?run=${ai}`);
+    await sleep(400);
+    await openPanel(p);
+    await waitPanel(p);
+    await sleep(200);
+    const got = await p.evaluate(() => [document.getElementById('first').value, document.getElementById('k8s').value, window.__submits || 0]);
+    check('form filled, invented answer still thrown out, never submitted', got[0] === 'Asha' && got[1] === '' && got[2] === 0, got);
+    const r = formRequests()[0];
+    if (ai === 'gemini') {
+      check('streams from the chosen Gemini model', r?.provider === 'gemini' && r.path === '/v1beta/models/gemini-3.8-flash:streamGenerateContent?alt=sse', r?.path);
+      check('key sent only as the x-goog-api-key header', r?.headers['x-goog-api-key'] === 'test-gemini-key' && !/key=/.test(r?.path));
+      check('asks for JSON in the answers schema', r?.body.generationConfig?.responseMimeType === 'application/json' && r?.body.generationConfig?.responseJsonSchema?.properties?.answers?.type === 'array');
+      check('Careful maps to a high thinking level', r?.body.generationConfig?.thinkingConfig?.thinkingLevel === 'high', r?.body.generationConfig?.thinkingConfig);
+      check('profile rides in the system instruction', systemOf(r ?? {}).includes('<profile>'));
+      check('panel says Gemini free tier answered', /Gemini free tier/.test(await metaText(p)), await metaText(p));
+    } else {
+      check('request uses Claude Opus 5 with adaptive thinking', r?.body.model === 'claude-opus-5' && r?.body.thinking?.type === 'adaptive', r?.body.model);
+      check('request asks for strict JSON output', r?.body.output_config?.format?.type === 'json_schema');
+      check('request opts into server-side fallbacks', r?.body.fallbacks === 'default' && String(r?.headers['anthropic-beta']).includes('server-side-fallback-2026-07-01'), r?.headers['anthropic-beta']);
+      check('profile prompt is marked for caching', r?.body.system?.[0]?.cache_control?.type === 'ephemeral');
+      check('API key sent only as the x-api-key header', r?.headers['x-api-key'] === 'test-key');
+      check('panel shows what the form cost', /about \$\d/.test(await metaText(p)), await metaText(p));
+    }
+    await p.close();
+  }
+
+  // ------------------------------------------------------------------ 5. setup nudges
   console.log('\nFirst run without setup');
-  await seed({ settings: { baseURL: BASE } });
+  await seed({ settings: { ollamaURL: BASE } });
   const fresh = await browser.newPage();
   await fresh.goto(`${BASE}/fixtures/job-form.html?run=setup`);
   await openPanel(fresh);
   await waitPanel(fresh, '.hero .btn[data-act=settings]');
   text = await panelText(fresh);
-  check('panel asks for setup instead of failing', /Let's set you up/.test(text) && /API key/.test(text) && /resume/.test(text), text);
+  check('panel asks for setup instead of failing', /Let's set you up/.test(text) && /an AI to answer with/.test(text) && /resume/.test(text), text);
   await fresh.close();
 
-  // ------------------------------------------------------------------ 5. settings page: key + build profile from a PDF
-  console.log('\nSettings page: connect Claude and build a profile from a PDF');
-  await seed({ settings: { baseURL: BASE } });
+  // ------------------------------------------------------------------ 6. settings page: find Ollama, build a profile from a PDF
+  console.log('\nSettings page: find the local model and build a profile from a PDF');
+  await seed({ settings: { ollamaURL: BASE } });
   requests.length = 0;
   const opt = await browser.newPage();
   opt.on('dialog', (d) => d.accept());
   await opt.goto(`chrome-extension://${extId}/options.html`);
   await opt.waitForSelector('#readiness');
-  await opt.waitForFunction(() => /2 steps/.test(document.getElementById('readiness').textContent));
-  check('readiness shows two steps to go', true);
-  await opt.type('#apiKey', 'sk-ant-test-key');
-  await opt.click('#saveKey');
-  await opt.waitForFunction(() => document.getElementById('keyStatus').classList.contains('ok') || document.getElementById('keyStatus').classList.contains('bad'), { timeout: 10000 });
-  check('key test passes', /Connected/.test(await opt.$eval('#keyStatus', (e) => e.textContent)), await opt.$eval('#keyStatus', (e) => e.textContent));
+  await opt.waitForFunction(() => /ok|bad/.test(document.getElementById('ollamaStatus').className), { timeout: 10000 });
+  check('"On this computer" is the default', await opt.$eval('.prov[data-provider=ollama]', (e) => e.getAttribute('aria-checked') === 'true'));
+  check('Ollama found past its extension block', /Ollama 0\.34\.3 is running/.test(await opt.$eval('#ollamaStatus', (e) => e.textContent)), await opt.$eval('#ollamaStatus', (e) => e.textContent));
+  const models = await opt.$$eval('#ollamaModel option', (o) => o.map((x) => ({ v: x.value, sel: x.selected })));
+  check('chat models listed, embedding models left out', models.length === 2 && !models.some((m) => /embed/.test(m.v)), models);
+  check('recommended model picked by itself', models.find((m) => m.sel)?.v === 'qwen3.5:4b' && (await storage('settings'))?.ollamaModel === 'qwen3.5:4b', models);
+  await opt.waitForFunction(() => /1 step/.test(document.getElementById('readiness').textContent));
+  check('readiness shows one step to go', true);
+
   const input = await opt.$('#files');
   await input.uploadFile(pdfPath);
   await opt.waitForFunction(() => document.querySelectorAll('#fileList li').length === 1);
@@ -348,9 +402,12 @@ try {
   await opt.waitForFunction(() => /ok|bad/.test(document.getElementById('buildStatus').className), { timeout: 30000 });
   const buildStatus = await opt.$eval('#buildStatus', (e) => e.textContent);
   check('profile built from the PDF', /Done/.test(buildStatus), buildStatus);
-  const buildReq = requests.find((r) => r.body.system?.[0]?.text.startsWith("You turn a person's documents"));
-  check('PDF sent to Claude as a document block', buildReq?.body.messages[0].content.some((c) => c.type === 'document' && c.source.media_type === 'application/pdf'));
-  check('profile extraction uses the profile schema', buildReq?.body.output_config?.format?.schema?.properties?.basics?.type === 'object');
+  const buildReq = requests.find((r) => systemOf(r).startsWith("You turn a person's documents"));
+  const buildText = buildReq ? userOf(buildReq) : '';
+  check('PDF turned into text on this computer', /Asha Rani Verma/.test(buildText) && /Example Institute of Technology/.test(buildText), buildText.slice(0, 200));
+  check('link hidden behind "LinkedIn" recovered from the PDF', buildText.includes('https://www.linkedin.com/in/asha-verma'), buildText.slice(-200));
+  check('no PDF bytes sent to the local model', !buildText.includes('JVBERi0') && !buildReq?.body.messages.some((m) => m.images?.length));
+  check('profile extraction uses the profile schema', buildReq?.body.format?.properties?.basics?.type === 'object');
   const stored = await storage('profile');
   check('profile saved', stored?.basics?.full_name === 'Asha Rani Verma', stored?.basics?.full_name);
   check('resume kept for upload fields', (await storage('resumeFile'))?.name === 'Asha_Verma_Resume.pdf');
@@ -371,6 +428,50 @@ try {
   await opt.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
   await sleep(200);
   await opt.screenshot({ path: path.join(OUT, '7-settings-top.png') });
+
+  // Switch to Gemini: a wrong key is caught, a good one connects, and PDFs go
+  // to Gemini as they are.
+  console.log('\nSettings page: switch to Gemini, then Claude');
+  await opt.click('.prov[data-provider=gemini]');
+  await opt.waitForSelector('.prov-panel[data-for=gemini]:not([hidden])');
+  await opt.evaluate((b) => chrome.storage.local.get('settings').then(({ settings }) => chrome.storage.local.set({ settings: { ...settings, geminiBaseURL: b } })), BASE);
+  await opt.type('#geminiKey', 'bad-key');
+  await opt.click('#saveGemini');
+  await opt.waitForFunction(() => /ok|bad/.test(document.getElementById('geminiStatus').className), { timeout: 10000 });
+  check('a wrong Gemini key is caught', /rejected/.test(await opt.$eval('#geminiStatus', (e) => e.textContent)), await opt.$eval('#geminiStatus', (e) => e.textContent));
+  await opt.$eval('#geminiKey', (e) => (e.value = ''));
+  await opt.type('#geminiKey', 'test-gemini-key');
+  await opt.click('#saveGemini');
+  await opt.waitForFunction(() => /Connected/.test(document.getElementById('geminiStatus').textContent), { timeout: 10000 }).catch(() => {});
+  check('a good Gemini key connects', /Connected\. Gemini 3\.8 Flash is ready/.test(await opt.$eval('#geminiStatus', (e) => e.textContent)), await opt.$eval('#geminiStatus', (e) => e.textContent));
+  check('the free-tier data warning is shown', await opt.$eval('.prov-panel[data-for=gemini] .note', (e) => /Google may use/.test(e.textContent) && e.offsetParent !== null));
+  check('Gemini is now the chosen AI', (await storage('settings'))?.provider === 'gemini');
+  requests.length = 0;
+  await (await opt.$('#files')).uploadFile(pdfPath);
+  await opt.waitForFunction(() => document.querySelectorAll('#fileList li').length === 1);
+  await opt.click('#build');
+  await opt.waitForFunction(() => /ok|bad/.test(document.getElementById('buildStatus').className) && !/Reading|reading/.test(document.getElementById('buildStatus').textContent), { timeout: 30000 });
+  const gReq = requests.find((r) => r.provider === 'gemini' && systemOf(r).startsWith("You turn a person's documents"));
+  check('PDF sent to Gemini as the file itself', !!gReq?.body.contents[0].parts.some((pt) => pt.inlineData?.mimeType === 'application/pdf'), gReq?.body.contents?.[0]?.parts?.map((pt) => Object.keys(pt)));
+
+  await opt.click('.prov[data-provider=claude]');
+  await opt.waitForSelector('.prov-panel[data-for=claude]:not([hidden])');
+  await opt.evaluate((b) => chrome.storage.local.get('settings').then(({ settings }) => chrome.storage.local.set({ settings: { ...settings, claudeBaseURL: b } })), BASE);
+  await opt.type('#claudeKey', 'sk-ant-test-key');
+  await opt.click('#saveClaude');
+  await opt.waitForFunction(() => /ok|bad/.test(document.getElementById('claudeStatus').className) && !/Checking/.test(document.getElementById('claudeStatus').textContent), { timeout: 10000 });
+  check('Claude key test passes', /Connected/.test(await opt.$eval('#claudeStatus', (e) => e.textContent)), await opt.$eval('#claudeStatus', (e) => e.textContent));
+  await opt.close();
+
+  // ------------------------------------------------------------------ 7. upgrading from v0.1
+  console.log('\nUpgrading from v0.1 (Claude only)');
+  await seed({ settings: { apiKey: 'sk-ant-old', baseURL: BASE, effort: 'medium' }, profile: PROFILE, facts: [] });
+  const up = await browser.newPage();
+  await up.goto(`chrome-extension://${extId}/options.html`);
+  await up.waitForFunction(() => document.querySelector('.prov[aria-checked=true]'));
+  const old = await up.evaluate(() => ({ chosen: document.querySelector('.prov[aria-checked=true]').dataset.provider, key: document.getElementById('claudeKey').value, url: document.getElementById('claudeBaseURL').value }));
+  check('an old Claude key keeps working, and Claude stays chosen', old.chosen === 'claude' && old.key === 'sk-ant-old' && old.url === BASE, old);
+  await up.close();
 } catch (err) {
   failures += 1;
   console.error('\nE2E crashed:', err);

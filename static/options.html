@@ -32,15 +32,60 @@
     </section>
 
     <section id="connect" class="card step">
-      <div class="step-head"><span class="step-no">1</span><div><h2>Connect Claude</h2><p class="sub">fill.ai uses Claude Opus 5 to understand your resume and each form. Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. It stays in this browser.</p></div></div>
-      <div class="key-row">
-        <div class="key-box">
-          <input id="apiKey" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false" aria-label="Claude API key">
-          <button id="toggleKey" class="ghost small" type="button">Show</button>
-        </div>
-        <button id="saveKey" class="primary" type="button">Save and test</button>
+      <div class="step-head"><span class="step-no">1</span><div><h2>Choose the AI</h2><p class="sub">It reads your resume once, then answers each form. Two of the three are free. You can switch any time.</p></div></div>
+      <div class="providers" id="providers" role="radiogroup" aria-label="Which AI">
+        <button type="button" role="radio" class="prov" data-provider="ollama">
+          <span class="prov-top"><span class="prov-name">On this computer</span><span class="tag free">Free · private</span></span>
+          <span class="prov-sub">A model running in Ollama. Nothing leaves your computer. Best with a graphics card.</span>
+        </button>
+        <button type="button" role="radio" class="prov" data-provider="gemini">
+          <span class="prov-top"><span class="prov-name">Gemini</span><span class="tag free">Free tier</span></span>
+          <span class="prov-sub">Google's AI with a free key. Works on any laptop.</span>
+        </button>
+        <button type="button" role="radio" class="prov" data-provider="claude">
+          <span class="prov-top"><span class="prov-name">Claude</span><span class="tag paid">Paid</span></span>
+          <span class="prov-sub">Claude Opus 5 with your Anthropic key. The most careful, a few cents a form.</span>
+        </button>
       </div>
-      <p id="keyStatus" class="status" role="status"></p>
+
+      <div class="prov-panel" data-for="ollama" hidden>
+        <div class="ollama-row">
+          <label class="lbl grow">Ollama address
+            <input id="ollamaURL" type="url" placeholder="http://localhost:11434" spellcheck="false">
+          </label>
+          <button id="checkOllama" class="ghost" type="button">Check again</button>
+        </div>
+        <p id="ollamaStatus" class="status" role="status"></p>
+        <label class="lbl" id="ollamaModelWrap" hidden>Model
+          <select id="ollamaModel"></select>
+        </label>
+        <div id="ollamaHelp" class="help" hidden></div>
+      </div>
+
+      <div class="prov-panel" data-for="gemini" hidden>
+        <p class="sub">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>. No card needed. It stays in this browser.</p>
+        <div class="key-row">
+          <div class="key-box">
+            <input id="geminiKey" type="password" placeholder="AIza…" autocomplete="off" spellcheck="false" aria-label="Gemini API key">
+            <button class="ghost small reveal" data-for="geminiKey" type="button">Show</button>
+          </div>
+          <button id="saveGemini" class="primary" type="button">Save and test</button>
+        </div>
+        <p id="geminiStatus" class="status" role="status"></p>
+        <p class="note">On the free tier, Google may use what fill.ai sends, your resume included, to improve its products. If that matters to you, choose "On this computer".</p>
+      </div>
+
+      <div class="prov-panel" data-for="claude" hidden>
+        <p class="sub">Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>. API use is billed by Anthropic, separately from a Claude subscription. It stays in this browser.</p>
+        <div class="key-row">
+          <div class="key-box">
+            <input id="claudeKey" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false" aria-label="Claude API key">
+            <button class="ghost small reveal" data-for="claudeKey" type="button">Show</button>
+          </div>
+          <button id="saveClaude" class="primary" type="button">Save and test</button>
+        </div>
+        <p id="claudeStatus" class="status" role="status"></p>
+      </div>
     </section>
 
     <section id="teach" class="card step">
@@ -85,7 +130,7 @@
     <section id="settings" class="card">
       <h2>Settings</h2>
       <div class="setting">
-        <div><h3>How careful</h3><p class="sub">Careful takes a little longer and thinks harder about each field. Recommended.</p></div>
+        <div><h3>How careful</h3><p class="sub">Careful thinks harder about each field and takes longer. On a local model it can take a few minutes, so Balanced is a good everyday choice there.</p></div>
         <div class="seg" id="effort" role="radiogroup" aria-label="How careful">
           <button type="button" role="radio" data-effort="low">Fast</button>
           <button type="button" role="radio" data-effort="medium">Balanced</button>
@@ -102,15 +147,19 @@
       </div>
       <details class="advanced">
         <summary>Advanced</summary>
-        <label class="lbl">API base URL <span class="faint">(leave empty for Anthropic)</span>
-          <input id="baseURL" type="url" placeholder="https://api.anthropic.com" spellcheck="false">
+        <label class="lbl">Gemini model <span class="faint">(Flash-Lite has a bigger free daily limit)</span>
+          <input id="geminiModel" type="text" list="geminiModels" placeholder="gemini-3.8-flash" spellcheck="false">
+          <datalist id="geminiModels"></datalist>
+        </label>
+        <label class="lbl">Claude API base URL <span class="faint">(leave empty for Anthropic)</span>
+          <input id="claudeBaseURL" type="url" placeholder="https://api.anthropic.com" spellcheck="false">
         </label>
       </details>
     </section>
 
     <section id="data" class="card">
       <h2>Your data</h2>
-      <p class="sub">Your profile, saved answers and key live only in this browser. While a form is being filled, the form's questions and your profile are sent to Anthropic to work out the answers. Nothing is ever submitted for you.</p>
+      <p class="sub">Your profile, saved answers and keys live only in this browser. While a form is being filled, the form's questions and your profile go to the AI you chose: nowhere at all with "On this computer", to Google with Gemini, to Anthropic with Claude. Nothing is ever submitted for you.</p>
       <div class="actions wrap">
         <button id="exportData" class="ghost" type="button">Export profile</button>
         <label class="ghost button-like">Import profile<input id="importData" type="file" accept="application/json,.json" hidden></label>

@@ -1,12 +1,12 @@
 // fill.ai service worker. It runs the loop the panel asks for: read every
-// frame of the tab, ask Claude, check the answers, fill what passed, report.
+// frame of the tab, ask the chosen AI, check the answers, fill what passed, report.
 // It holds no state between messages; the panel keeps the picture.
 
 import { getKnowledge, getResumeFile, getSettings, rememberFact } from '../shared/storage.js';
 import { isProfileEmpty } from '../shared/schema.js';
-import { askJson } from '../shared/claude.js';
+import { askJson, isConnected } from '../shared/ai/index.js';
 import { ANSWERS_SCHEMA, formSystemPrompt, formUserContent } from '../shared/prompts.js';
-import { estimateCost, modelView, prepareFields, validateAnswers } from '../shared/matcher.js';
+import { modelView, prepareFields, validateAnswers } from '../shared/matcher.js';
 import { textOf } from '../shared/paths.js';
 
 chrome.runtime.onInstalled.addListener(({ reason }) => {
@@ -103,7 +103,7 @@ chrome.runtime.onConnect.addListener((port) => {
 async function analyze(port, tabId, signal) {
   const [settings, knowledge, resume] = await Promise.all([getSettings(), getKnowledge(), getResumeFile()]);
   const missing = [];
-  if (!settings.apiKey) missing.push('key');
+  if (!isConnected(settings)) missing.push('ai');
   if (isProfileEmpty(knowledge) && !knowledge.facts.length) missing.push('profile');
   if (missing.length) return post(port, { type: 'needs-setup', missing });
 
@@ -125,7 +125,8 @@ async function analyze(port, tabId, signal) {
   post(port, { type: 'progress', stage: 'thinking', total, done: 0 });
   const resumeOnFile = !!resume?.data;
 
-  // Long Claude calls must not let the worker fall asleep mid-request.
+  // Long AI calls (minutes, on a local model) must not let the worker fall
+  // asleep mid-request.
   const keepAlive = setInterval(() => chrome.runtime.getPlatformInfo().catch(() => {}), 20000);
   let result;
   try {
@@ -171,7 +172,8 @@ async function analyze(port, tabId, signal) {
       placeholder: f.placeholder || '',
       ...decisions[i],
     })),
-    cost: estimateCost(result.usage),
+    cost: result.cost,
+    via: result.via,
     dropped,
   });
 }

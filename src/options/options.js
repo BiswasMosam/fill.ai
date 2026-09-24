@@ -1,4 +1,4 @@
-// fill.ai settings and profile page: connect Claude, build the profile from
+// fill.ai settings and profile page: choose the AI, build the profile from
 // documents, edit what fill.ai knows, manage saved answers and data.
 
 import { LONG_TEXT, PROFILE_SCHEMA, SECTION_TITLES, conform, emptyFrom, isProfileEmpty } from '../shared/schema.js';
@@ -14,9 +14,11 @@ import {
   saveSources,
   wipeEverything,
 } from '../shared/storage.js';
-import { askJson, testKey } from '../shared/claude.js';
+import { PROVIDERS, askJson, isConnected, providerOf } from '../shared/ai/index.js';
+import { DEFAULT_URL, RECOMMENDED } from '../shared/ai/ollama.js';
+import { DEFAULT_MODEL as GEMINI_DEFAULT, MODELS as GEMINI_MODELS } from '../shared/ai/gemini.js';
 import { PROFILE_SYSTEM } from '../shared/prompts.js';
-import { estimateCost } from '../shared/matcher.js';
+import { pdfText } from './pdf-text.js';
 
 const $ = (sel) => document.querySelector(sel);
 let chosen = []; // files picked in step 2: { name, type, size, data }
@@ -75,48 +77,168 @@ function kb(bytes) {
 
 async function refreshReadiness() {
   const [settings, profile, facts] = await Promise.all([getSettings(), getProfile(), getFacts()]);
-  const keyOk = !!settings.apiKey;
+  const aiOk = isConnected(settings);
   const profileOk = !isProfileEmpty(profile) || facts.length > 0;
-  $('#connect').classList.toggle('done', keyOk);
+  $('#connect').classList.toggle('done', aiOk);
   $('#teach').classList.toggle('done', profileOk);
   const r = $('#readiness');
-  const left = [!keyOk, !profileOk].filter(Boolean).length;
+  const left = [!aiOk, !profileOk].filter(Boolean).length;
   r.textContent = left ? `${left} step${left > 1 ? 's' : ''} to go` : 'Ready on every form';
   r.className = `readiness ${left ? 'todo' : 'ready'}`;
 }
 
-// ------------------------------------------------------------------ step 1: key
+// ------------------------------------------------------------------ step 1: the AI
 
-async function initKey() {
+function paintProvider(id) {
+  document.querySelectorAll('#providers .prov').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.provider === id)));
+  document.querySelectorAll('.prov-panel').forEach((p) => (p.hidden = p.dataset.for !== id));
+}
+
+function gb(bytes) {
+  return `${(bytes / 1e9).toFixed(1)} GB`;
+}
+
+function pullCommand(model) {
+  const cmd = `ollama pull ${model}`;
+  return el(
+    'span',
+    { class: 'cmd' },
+    el('code', {}, cmd),
+    el('button', { class: 'ghost small', type: 'button', onclick: () => navigator.clipboard.writeText(cmd).then(() => toast('Copied. Paste it into a terminal.')) }, 'Copy'),
+  );
+}
+
+function ollamaHelp(...kids) {
+  const help = $('#ollamaHelp');
+  help.replaceChildren(...kids);
+  help.hidden = !kids.length;
+}
+
+// Is Ollama up, which chat models does it have, and which one do we use?
+// Picks the recommended model by itself when it is installed.
+let ollamaRun = 0;
+async function checkOllama() {
+  const run = ++ollamaRun;
   const settings = await getSettings();
-  $('#apiKey').value = settings.apiKey;
-  $('#baseURL').value = settings.baseURL;
-  if (settings.apiKey) status('#keyStatus', 'Key saved.', 'ok');
-  $('#toggleKey').addEventListener('click', () => {
-    const input = $('#apiKey');
-    input.type = input.type === 'password' ? 'text' : 'password';
-    $('#toggleKey').textContent = input.type === 'password' ? 'Show' : 'Hide';
-  });
-  $('#saveKey').addEventListener('click', async () => {
-    const apiKey = $('#apiKey').value.trim();
-    if (!apiKey) return status('#keyStatus', 'Paste your key first.', 'bad');
-    const next = await saveSettings({ apiKey });
-    $('#saveKey').disabled = true;
-    status('#keyStatus', 'Checking the key with Claude…', 'busy');
+  status('#ollamaStatus', 'Looking for Ollama…', 'busy');
+  let found;
+  try {
+    found = await PROVIDERS.ollama.test(settings);
+  } catch (err) {
+    if (run !== ollamaRun) return;
+    $('#ollamaModelWrap').hidden = true;
+    status('#ollamaStatus', err.message, 'bad');
+    if (err.code === 'offline') {
+      ollamaHelp(
+        el('p', {}, 'To run the AI on this computer:'),
+        el(
+          'ol',
+          {},
+          el('li', {}, 'Install Ollama from ', el('a', { href: 'https://ollama.com/download', target: '_blank', rel: 'noopener' }, 'ollama.com'), ' and open it.'),
+          el('li', {}, 'In a terminal, download the model once (3.4 GB): ', pullCommand(RECOMMENDED)),
+          el('li', {}, 'Come back and press Check again.'),
+        ),
+        el('p', { class: 'faint' }, 'No graphics card? Gemini is the easier free choice.'),
+      );
+    } else ollamaHelp();
+    return;
+  }
+  if (run !== ollamaRun) return;
+  const { version, models } = found;
+  if (!models.length) {
+    $('#ollamaModelWrap').hidden = true;
+    status('#ollamaStatus', `Ollama ${version} is running, but it has no chat models yet.`, 'bad');
+    ollamaHelp(el('p', {}, 'Download one in a terminal (3.4 GB, once): ', pullCommand(RECOMMENDED), ' then press Check again.'));
+    if (settings.ollamaModel) await saveSettings({ ollamaModel: '' });
+    return refreshReadiness();
+  }
+
+  const names = models.map((m) => m.name);
+  let chosen = settings.ollamaModel;
+  if (!names.includes(chosen)) chosen = names.includes(RECOMMENDED) ? RECOMMENDED : names[0];
+  if (chosen !== settings.ollamaModel) await saveSettings({ ollamaModel: chosen });
+  $('#ollamaModel').replaceChildren(
+    ...models.map((m) =>
+      el('option', { value: m.name, selected: m.name === chosen }, [m.name, m.size && gb(m.size), m.name === RECOMMENDED && 'recommended'].filter(Boolean).join(' · ')),
+    ),
+  );
+  $('#ollamaModelWrap').hidden = false;
+  status('#ollamaStatus', `Ollama ${version} is running. ${models.length} model${models.length > 1 ? 's' : ''} ready.`, 'ok');
+  if (names.includes(RECOMMENDED)) ollamaHelp();
+  else ollamaHelp(el('p', {}, `For the best answers on a laptop graphics card, add ${RECOMMENDED} (3.4 GB): `, pullCommand(RECOMMENDED)));
+  refreshReadiness();
+}
+
+// Gemini and Claude: paste a key, save it, check it.
+function wireKey(id, settings) {
+  const field = `${id}Key`;
+  const input = $(`#${field}`);
+  const button = $(`#save${id[0].toUpperCase()}${id.slice(1)}`);
+  input.value = settings[field];
+  if (settings[field]) status(`#${id}Status`, 'Key saved.', 'ok');
+  button.addEventListener('click', async () => {
+    const key = input.value.trim();
+    if (!key) return status(`#${id}Status`, 'Paste your key first.', 'bad');
+    const next = await saveSettings({ [field]: key, provider: id });
+    button.disabled = true;
+    status(`#${id}Status`, `Checking the key with ${PROVIDERS[id].name}…`, 'busy');
     try {
-      await testKey(next);
-      status('#keyStatus', 'Connected. Claude is ready.', 'ok');
+      const { detail } = await PROVIDERS[id].test(next);
+      status(`#${id}Status`, detail, 'ok');
     } catch (err) {
-      status('#keyStatus', err.message, 'bad');
+      status(`#${id}Status`, err.message, 'bad');
     } finally {
-      $('#saveKey').disabled = false;
+      button.disabled = false;
       refreshReadiness();
     }
   });
-  $('#baseURL').addEventListener('change', async () => {
-    await saveSettings({ baseURL: $('#baseURL').value.trim() });
+}
+
+async function initConnect() {
+  const settings = await getSettings();
+  paintProvider(settings.provider);
+  $('#providers').addEventListener('click', async (e) => {
+    const b = e.target.closest('.prov');
+    if (!b) return;
+    paintProvider(b.dataset.provider);
+    await saveSettings({ provider: b.dataset.provider });
+    if (b.dataset.provider === 'ollama') checkOllama();
+    refreshReadiness();
+  });
+  document.querySelectorAll('.reveal').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const input = $(`#${btn.dataset.for}`);
+      input.type = input.type === 'password' ? 'text' : 'password';
+      btn.textContent = input.type === 'password' ? 'Show' : 'Hide';
+    }),
+  );
+  wireKey('gemini', settings);
+  wireKey('claude', settings);
+
+  $('#ollamaURL').value = settings.ollamaURL;
+  $('#ollamaURL').addEventListener('change', async () => {
+    await saveSettings({ ollamaURL: $('#ollamaURL').value.trim() || DEFAULT_URL, ollamaModel: '' });
+    checkOllama();
+  });
+  $('#checkOllama').addEventListener('click', checkOllama);
+  $('#ollamaModel').addEventListener('change', async () => {
+    await saveSettings({ ollamaModel: $('#ollamaModel').value });
+    toast(`Using ${$('#ollamaModel').value}.`);
+    refreshReadiness();
+  });
+
+  $('#geminiModels').replaceChildren(...GEMINI_MODELS.map((m) => el('option', { value: m })));
+  $('#geminiModel').value = settings.geminiModel;
+  $('#geminiModel').addEventListener('change', async () => {
+    await saveSettings({ geminiModel: $('#geminiModel').value.trim() || GEMINI_DEFAULT });
     toast('Saved.');
   });
+  $('#claudeBaseURL').value = settings.claudeBaseURL;
+  $('#claudeBaseURL').addEventListener('change', async () => {
+    await saveSettings({ claudeBaseURL: $('#claudeBaseURL').value.trim() });
+    toast('Saved.');
+  });
+  if (settings.provider === 'ollama') checkOllama();
 }
 
 // ------------------------------------------------------------------ step 2: build
@@ -194,9 +316,16 @@ async function readLink(url) {
   }
 }
 
+const READING = {
+  ollama: (s) => `${s.ollamaModel} is reading your documents on this computer. The first run loads the model, so give it a few minutes.`,
+  gemini: () => 'Gemini is reading your documents. This usually takes under a minute.',
+  claude: () => 'Claude is reading your documents. This usually takes a minute or two.',
+};
+
 async function build() {
   const settings = await getSettings();
-  if (!settings.apiKey) return status('#buildStatus', 'Connect Claude in step 1 first.', 'bad');
+  const provider = providerOf(settings);
+  if (!provider.isConnected(settings)) return status('#buildStatus', 'Choose the AI in step 1 first.', 'bad');
   const urls = $('#urls')
     .value.split(/\s+/)
     .map((u) => u.trim())
@@ -213,8 +342,23 @@ async function build() {
   const sources = [];
   try {
     for (const f of chosen) {
-      if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
+      const isPdf = f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
+      if (isPdf && provider.readsPdf) {
         content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: f.data }, title: f.name });
+      } else if (isPdf) {
+        // Local models read text only. pdf.js does the reading, on this computer.
+        status('#buildStatus', `Reading ${f.name}…`, 'busy');
+        let text = '';
+        try {
+          text = await pdfText(f.data);
+        } catch (err) {
+          console.warn('fill.ai: could not read', f.name, err);
+        }
+        if (text.replace(/\s/g, '').length < 40) {
+          toast(`${f.name} has almost no text in it, maybe a scan. Paste its text under "Anything else", or use Gemini for this step.`);
+          continue;
+        }
+        content.push({ type: 'text', text: `Source: ${f.name}\n\n${text}` });
       } else if (f.type.startsWith('image/')) {
         content.push({ type: 'text', text: `Source: ${f.name} (image)` });
         content.push({ type: 'image', source: { type: 'base64', media_type: f.type, data: f.data } });
@@ -242,13 +386,13 @@ async function build() {
     if (!content.length) throw new Error('Nothing could be read. Try adding your resume as a PDF.');
     content.push({ type: 'text', text: 'Build the profile from these documents.' });
 
-    status('#buildStatus', 'Claude is reading your documents. This usually takes a minute or two.', 'busy');
-    const { data, usage } = await askJson({
+    status('#buildStatus', READING[provider.id](settings), 'busy');
+    const { data, cost } = await askJson({
       settings,
       system: PROFILE_SYSTEM,
       content,
       schema: PROFILE_SCHEMA,
-      effort: 'high',
+      effort: provider.id === 'ollama' ? 'medium' : 'high',
       onText: (snap) => status('#buildStatus', `Writing your profile… ${Math.round(snap.length / 100) / 10}k characters`, 'busy'),
     });
 
@@ -256,7 +400,6 @@ async function build() {
     await saveSources(sources.map((s) => ({ name: s, at: new Date().toISOString() })));
     const pdf = chosen.find((f) => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
     if ($('#useResume').checked && pdf) await saveResumeFile({ name: pdf.name, type: 'application/pdf', size: pdf.size, data: pdf.data });
-    const cost = estimateCost(usage);
     status('#buildStatus', `Done${cost != null ? ` · about $${cost.toFixed(2)}` : ''}. Check your profile below.`, 'ok');
     chosen = [];
     renderFiles();
@@ -505,7 +648,7 @@ function initData() {
     }
   });
   $('#wipe').addEventListener('click', async () => {
-    if (!confirm('Delete your profile, saved answers, resume file and API key from this browser? This cannot be undone.')) return;
+    if (!confirm('Delete your profile, saved answers, resume file and API keys from this browser? This cannot be undone.')) return;
     await wipeEverything();
     location.reload();
   });
@@ -525,6 +668,6 @@ chrome.storage.onChanged.addListener((changes) => {
   initEditor();
   initFacts();
   initData();
-  await Promise.all([initKey(), initSettings(), loadProfile(), renderFacts()]);
+  await Promise.all([initConnect(), initSettings(), loadProfile(), renderFacts()]);
   refreshReadiness();
 })();

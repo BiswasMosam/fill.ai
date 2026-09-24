@@ -1,6 +1,6 @@
 {
   "name": "fill-ai",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "An AI that learns who you are once, then reads any form and fills it for you.",
   "type": "module",
@@ -15,7 +15,8 @@
   "author": "Mosam Biswas",
   "license": "MIT",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.128.0"
+    "@anthropic-ai/sdk": "^0.128.0",
+    "pdfjs-dist": "^6.3.289"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

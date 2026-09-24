@@ -1,8 +1,9 @@
-// Test server: serves the fixture pages, and pretends to be the Claude
-// Messages API so the whole extension can run end to end without a key.
+// Test server: serves the fixture pages, and pretends to be all three AIs
+// (Ollama, Gemini, the Claude Messages API) so the whole extension can run
+// end to end without a model or a key.
 //
 // The fake "model" answers from simple label rules against the profile it is
-// sent, the same way Claude is asked to. One rule deliberately invents an
+// sent, the same way the real AI is asked to. One rule deliberately invents an
 // answer, so the tests can prove the guards throw it out.
 
 import http from 'node:http';
@@ -68,6 +69,32 @@ function between(text, open, close) {
   return a === -1 || b === -1 ? null : text.slice(a + open.length, b);
 }
 
+// What the fake model says, whichever API asked: a profile for the profile
+// prompt, answers for a form.
+function replyTo(system, userText) {
+  if (system.startsWith("You turn a person's documents")) return PROFILE;
+  const knowledge = JSON.parse(between(system, '<profile>\n', '\n</profile>'));
+  const form = JSON.parse(between(userText, '<form>\n', '\n</form>'));
+  return { answers: form.fields.map((f) => answerFor(f, knowledge, knowledge.facts || [])) };
+}
+
+// Send `text` a slice at a time, like a model thinking out loud.
+function drip(text, onSlice, onEnd) {
+  let i = 0;
+  const tick = () => {
+    if (i < text.length) {
+      onSlice(text.slice(i, i + 180));
+      i += 180;
+      setTimeout(tick, 8);
+      return;
+    }
+    onEnd();
+  };
+  setTimeout(tick, 150);
+}
+
+// ------------------------------------------------------------------ Claude (Messages API)
+
 function respondStream(res, json, usage) {
   res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', 'access-control-allow-origin': '*' });
   const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -80,45 +107,103 @@ function respondStream(res, json, usage) {
   send('content_block_stop', { type: 'content_block_stop', index: 0 });
   send('content_block_start', { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } });
   const text = JSON.stringify(json);
-  let i = 0;
-  const tick = () => {
-    if (i < text.length) {
-      send('content_block_delta', { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: text.slice(i, i + 180) } });
-      i += 180;
-      setTimeout(tick, 8);
-      return;
-    }
-    send('content_block_stop', { type: 'content_block_stop', index: 1 });
-    send('message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: Math.ceil(text.length / 4) } });
-    send('message_stop', { type: 'message_stop' });
-    res.end();
-  };
-  setTimeout(tick, 150);
+  drip(
+    text,
+    (slice) => send('content_block_delta', { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: slice } }),
+    () => {
+      send('content_block_stop', { type: 'content_block_stop', index: 1 });
+      send('message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: Math.ceil(text.length / 4) } });
+      send('message_stop', { type: 'message_stop' });
+      res.end();
+    },
+  );
 }
 
-async function handleMessages(req, res, body) {
-  const record = { headers: req.headers, body: JSON.parse(body) };
-  requests.push(record);
-  const payload = record.body;
+function handleClaude(req, res, payload) {
   const usage = { input_tokens: 6000, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 };
-
   if (!payload.stream) {
     // The "Save and test" key check.
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ id: 'msg_ping', type: 'message', role: 'assistant', model: payload.model, content: [{ type: 'text', text: 'OK' }], stop_reason: 'end_turn', usage: { input_tokens: 10, output_tokens: 2 } }));
     return;
   }
-
   const system = payload.system?.[0]?.text || '';
-  if (system.startsWith("You turn a person's documents")) {
-    return respondStream(res, PROFILE, usage);
-  }
-
-  const knowledge = JSON.parse(between(system, '<profile>\n', '\n</profile>'));
   const userText = payload.messages[0].content.map((c) => c.text || '').join('');
-  const form = JSON.parse(between(userText, '<form>\n', '\n</form>'));
-  const answers = form.fields.map((f) => answerFor(f, knowledge, knowledge.facts || []));
-  respondStream(res, { answers }, usage);
+  respondStream(res, replyTo(system, userText), usage);
+}
+
+// ------------------------------------------------------------------ Ollama
+
+export const OLLAMA_MODELS = [
+  { name: 'qwen3.5:4b', size: 3400000000, capabilities: ['completion', 'vision', 'tools', 'thinking'], details: { parameter_size: '4.7B' } },
+  { name: 'llama3.2:3b', size: 2019393189, capabilities: ['completion', 'tools'], details: { parameter_size: '3.2B' } },
+  { name: 'nomic-embed-text:latest', size: 274302450, capabilities: ['embedding'], details: { parameter_size: '137M' } },
+];
+
+function json(res, status, body) {
+  res.writeHead(status, { 'content-type': 'application/json' });
+  res.end(JSON.stringify(body));
+}
+
+function handleOllama(req, res, url, payload) {
+  // Real Ollama refuses browser extensions unless OLLAMA_ORIGINS says
+  // otherwise. fill.ai must get past this without anyone setting it.
+  if (String(req.headers.origin || '').startsWith('chrome-extension://')) {
+    res.writeHead(403);
+    return res.end();
+  }
+  if (url.pathname === '/api/version') return json(res, 200, { version: '0.34.3' });
+  if (url.pathname === '/api/tags') return json(res, 200, { models: OLLAMA_MODELS.map((m) => ({ ...m, model: m.name })) });
+  const model = OLLAMA_MODELS.find((m) => m.name === payload?.model);
+  if (!model) return json(res, 404, { error: `model '${payload?.model}' not found` });
+  if (url.pathname === '/api/show') return json(res, 200, { capabilities: model.capabilities, model_info: { 'qwen35.context_length': 262144 } });
+
+  const system = payload.messages.find((m) => m.role === 'system')?.content || '';
+  const userText = payload.messages.find((m) => m.role === 'user')?.content || '';
+  const text = JSON.stringify(replyTo(system, userText));
+  res.writeHead(200, { 'content-type': 'application/x-ndjson' });
+  const line = (obj) => res.write(`${JSON.stringify(obj)}\n`);
+  drip(
+    text,
+    (slice) => line({ model: model.name, message: { role: 'assistant', content: slice }, done: false }),
+    () => {
+      line({ model: model.name, message: { role: 'assistant', content: '' }, done: true, done_reason: 'stop', prompt_eval_count: 6000, eval_count: Math.ceil(text.length / 4) });
+      res.end();
+    },
+  );
+}
+
+// ------------------------------------------------------------------ Gemini
+
+function handleGemini(req, res, url, payload) {
+  const key = req.headers['x-goog-api-key'];
+  if (!key || key === 'bad-key') return json(res, 400, { error: { code: 400, message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT' } });
+  const [, model, method] = url.pathname.match(/^\/v1beta\/models\/([^:]+)(?::(\w+))?$/) || [];
+  if (!model) return json(res, 404, { error: { code: 404, message: 'Not found', status: 'NOT_FOUND' } });
+  if (!method) return json(res, 200, { name: `models/${model}`, displayName: 'Gemini 3.8 Flash' });
+
+  const system = payload.systemInstruction?.parts?.map((p) => p.text).join('') || '';
+  const userText = payload.contents[0].parts.map((p) => p.text || '').join('');
+  const text = JSON.stringify(replyTo(system, userText));
+  res.writeHead(200, { 'content-type': 'text/event-stream' });
+  const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\r\n\r\n`);
+  drip(
+    text,
+    (slice) => send({ candidates: [{ content: { role: 'model', parts: [{ text: slice }] }, index: 0 }] }),
+    () => {
+      send({ candidates: [{ content: { role: 'model', parts: [{ text: '' }] }, finishReason: 'STOP', index: 0 }], usageMetadata: { promptTokenCount: 6000, candidatesTokenCount: Math.ceil(text.length / 4) } });
+      res.end();
+    },
+  );
+}
+
+// ------------------------------------------------------------------ server
+
+function route(url) {
+  if (url.pathname === '/v1/messages') return 'claude';
+  if (url.pathname.startsWith('/api/')) return 'ollama';
+  if (url.pathname.startsWith('/v1beta/')) return 'gemini';
+  return null;
 }
 
 export function startServer(port) {
@@ -128,10 +213,22 @@ export function startServer(port) {
       res.writeHead(204, { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'POST' });
       return res.end();
     }
-    if (url.pathname === '/v1/messages' && req.method === 'POST') {
+    const provider = route(url);
+    if (provider) {
       let body = '';
       req.on('data', (c) => (body += c));
-      req.on('end', () => handleMessages(req, res, body).catch((err) => (res.writeHead(500), res.end(String(err)))));
+      req.on('end', () => {
+        try {
+          const payload = body ? JSON.parse(body) : null;
+          requests.push({ provider, path: url.pathname + url.search, method: req.method, headers: req.headers, body: payload || {} });
+          if (provider === 'claude') handleClaude(req, res, payload);
+          else if (provider === 'ollama') handleOllama(req, res, url, payload);
+          else handleGemini(req, res, url, payload);
+        } catch (err) {
+          res.writeHead(500);
+          res.end(String(err));
+        }
+      });
       return;
     }
     if (url.pathname.startsWith('/fixtures/')) {

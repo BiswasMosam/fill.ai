@@ -30,7 +30,7 @@ const TEXTISH = new Set(['text', 'email', 'tel', 'url', 'number', 'date', 'month
 
 export class Panel {
   constructor() {
-    this.state = { view: 'idle', fields: [], progress: null, error: null, cost: null, dropped: 0, newFields: 0 };
+    this.state = { view: 'idle', fields: [], progress: null, error: null, cost: null, via: '', dropped: 0, newFields: 0 };
     this.port = null;
     this.open = false;
     this.minimized = false;
@@ -221,7 +221,7 @@ export class Panel {
         this.state = { ...this.state, view: 'working', progress: msg };
         break;
       case 'result':
-        this.state = { ...this.state, view: msg.fields.length ? 'results' : 'empty', fields: msg.fields, cost: msg.cost, dropped: msg.dropped || 0 };
+        this.state = { ...this.state, view: msg.fields.length ? 'results' : 'empty', fields: msg.fields, cost: msg.cost, via: msg.via || '', dropped: msg.dropped || 0 };
         this.watch();
         break;
       case 'applied': {
@@ -401,13 +401,16 @@ export class Panel {
     const badge = this.pill.querySelector('.badge');
     badge.hidden = !open;
     badge.textContent = String(open);
-    this.meta.textContent = s.cost != null && s.view === 'results' ? `This form: about $${s.cost.toFixed(2)} · never submits` : 'Never submits. You check, then you submit.';
+    let meta = 'Never submits. You check, then you submit.';
+    if (s.view === 'results' && s.cost != null) meta = `This form: about $${s.cost.toFixed(2)} · never submits`;
+    else if (s.view === 'results' && s.via) meta = `${s.via} · never submits`;
+    this.meta.textContent = meta;
     this.place();
   }
 
   viewSetup() {
     const missing = this.state.missing || [];
-    const needs = [missing.includes('key') && 'your Claude API key', missing.includes('profile') && 'your resume'].filter(Boolean).join(' and ');
+    const needs = [missing.includes('ai') && 'an AI to answer with', missing.includes('profile') && 'your resume'].filter(Boolean).join(' and ');
     return `<div class="hero">${logo(48)}
       <h2>Let's set you up</h2>
       <p>fill.ai needs ${h(needs || 'a little setup')} before it can fill forms for you. It takes about a minute.</p>

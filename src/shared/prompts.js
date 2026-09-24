@@ -76,7 +76,8 @@ export const PROFILE_SYSTEM = `You turn a person's documents (resume, portfolio,
 - Record only what the documents state. Don't infer, embellish or fill gaps. Anything missing stays an empty string or an empty list.
 - Keep their own wording for achievements and descriptions. Only tidy formatting noise such as stray bullets or broken line wraps.
 - Dates: YYYY-MM when month and year are known, YYYY when only the year is. Ongoing roles get "Present" as the end and is_current true.
-- Split full_name into first, middle and last names as written.
+- Split full_name into first, middle and last names as written. Take the name from where the document presents the person, never from an email address or a web address.
+- Text set in capitals only for design (names, headings, schools, companies, job titles) goes in normal capitalisation: "Mosam Biswas", "Software Developer Intern". Keep real acronyms such as AI, IEEE or HSC in capitals.
 - Keep the phone number's country code if one is given.
 - Links are full URLs with a short label such as LinkedIn, GitHub or Portfolio.
 - Each degree or school goes in education, each job, internship or traineeship in experience (employment_type such as Internship, Full-time, Part-time, Freelance, Traineeship), clubs and positions of responsibility in leadership. Anything useful that fits nowhere goes in other.

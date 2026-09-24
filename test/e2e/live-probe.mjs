@@ -31,7 +31,7 @@ try {
       await chrome.storage.local.clear();
       await chrome.storage.local.set(cfg);
     },
-    { settings: { apiKey: 'k', baseURL: `http://127.0.0.1:${PORT}` }, profile: PROFILE, facts: [], resumeFile: { name: 'Asha_Verma_Resume.pdf', type: 'application/pdf', size: 20, data: 'JVBERi0xLjQKJSVFT0YK' } },
+    { settings: { provider: 'ollama', ollamaURL: `http://127.0.0.1:${PORT}`, ollamaModel: 'qwen3.5:4b', effort: 'medium' }, profile: PROFILE, facts: [], resumeFile: { name: 'Asha_Verma_Resume.pdf', type: 'application/pdf', size: 20, data: 'JVBERi0xLjQKJSVFT0YK' } },
   );
   const page = await browser.newPage();
   await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
@@ -43,9 +43,9 @@ try {
   await page.waitForFunction(() => document.querySelector('#fillai-root')?.shadowRoot?.querySelector('.chips, .hero h2'), { timeout: 60000 });
   await new Promise((r) => setTimeout(r, 1500));
   console.log('scrollY before', y0, 'after', await page.evaluate(() => scrollY), 'trail', (await page.evaluate(() => window.__scrolls)).slice(-12).join(' '));
-  const req = requests.find((r) => r.body.stream);
+  const req = requests.find((r) => r.path === '/api/chat');
   if (req) {
-    const form = JSON.parse(req.body.messages[0].content[0].text.split('<form>\n')[1].split('\n</form>')[0]);
+    const form = JSON.parse(req.body.messages[1].content.split('<form>\n')[1].split('\n</form>')[0]);
     console.log(`page: ${form.page?.title}\n${form.fields.length} fields sent:`);
     for (const f of form.fields) console.log(' ', f.id.padEnd(6), f.kind.padEnd(10), JSON.stringify(f.label).slice(0, 70), f.options ? `[${f.options.length} options]` : '', f.guard ? `guard=${f.guard}` : '');
   }

@@ -70,6 +70,8 @@ export function validateAnswers({ fields, answers, knowledge, resumeOnFile }) {
   return fields.map((field) => decide(field, byId.get(field.gid), knowledge, resumeOnFile));
 }
 
+const RESUME_LABEL = /\b(resume|résumé|cv|curriculum vitae)\b/i;
+
 function decide(field, answer, knowledge, resumeOnFile) {
   const base = { gid: field.gid, status: 'ask', value: '', values: [], sources: [], note: '' };
   if (!answer) return { ...base, note: 'No answer came back for this one.' };
@@ -112,6 +114,12 @@ function decide(field, answer, knowledge, resumeOnFile) {
   }
 
   if (status !== 'fill') return { ...base, note };
+
+  // Attaching the saved resume to a field that asks for one needs no profile
+  // path: the file is the evidence. Small local models rarely cite one here.
+  if (field.kind === 'file' && norm(value) === 'resume' && resumeOnFile && !sources.length && RESUME_LABEL.test(`${field.label} ${field.placeholder || ''}`)) {
+    return { ...base, status: 'fill', value: 'resume', sources: [{ path: '', label: 'Your resume file' }], note };
+  }
 
   // From here on the model claims it knows the answer. Make it prove it.
   if (!sources.length) return { ...base, note: 'Could not trace an answer to your profile.' };

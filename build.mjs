@@ -12,6 +12,8 @@ const outdir = test ? 'dist-test' : 'dist';
 rmSync(outdir, { recursive: true, force: true });
 mkdirSync(outdir, { recursive: true });
 cpSync('static', outdir, { recursive: true });
+// pdf.js reads resumes for local models in a worker of its own.
+cpSync('node_modules/pdfjs-dist/build/pdf.worker.min.mjs', `${outdir}/pdf.worker.min.mjs`);
 
 const options = {
   entryPoints: {
