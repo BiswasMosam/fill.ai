@@ -9,6 +9,8 @@ profile*.json
 node_modules/
 dist/
 dist-test/
+release/
+_site/
 test/e2e/out/
 .venv/
 __pycache__/

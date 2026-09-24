@@ -56,21 +56,18 @@ An AI that fills forms for you is only useful if it never makes things up. fill.
 
 ## Install
 
-fill.ai is a Chrome extension (it also works in Edge and other Chromium browsers). It is not on the Chrome Web Store yet, so for now you load it yourself:
+**[Download fill.ai from www.mosambiswas.com/fill.ai](https://www.mosambiswas.com/fill.ai/)**, where the steps are shown with pictures.
 
-```bash
-git clone https://github.com/BiswasMosam/fill.ai.git
-cd fill.ai
-npm install
-npm run build
-```
+fill.ai is a Chrome extension (it also works in Edge, Brave and other Chromium browsers). It is not on the Chrome Web Store yet, so Chrome needs you to load it yourself, once:
 
-1. Open `chrome://extensions` and switch on **Developer mode**.
-2. Click **Load unpacked** and choose the `dist` folder. The settings page opens.
+1. Download [`fill-ai.zip`](https://github.com/BiswasMosam/fill.ai/releases/latest/download/fill-ai.zip) and unzip it somewhere it can stay (Chrome runs fill.ai from that folder).
+2. Open `chrome://extensions`, switch on **Developer mode** and click **Load unpacked**. Choose the unzipped folder, the one with `manifest.json` inside. The settings page opens.
 3. Choose the AI.
    - **On this computer:** install [Ollama](https://ollama.com/download), open it, and run `ollama pull qwen3.5:4b` once in a terminal. Press **Check again** and fill.ai finds it and picks the model. There is no `OLLAMA_ORIGINS` to set: fill.ai handles Ollama's block on browser extensions itself.
    - **Gemini** or **Claude:** paste your key and press **Save and test**.
 4. Drop your resume into step 2 and press **Build my profile**. Check the result in *Your profile* and fix anything that is off.
+
+To update, download the zip again, unzip it into the same folder replacing the files, and press the reload arrow on fill.ai in `chrome://extensions`. Your profile stays.
 
 ## What goes where
 
@@ -116,7 +113,12 @@ Local models and Gemini's free tier cost nothing; the panel shows which model an
 
 ## Development
 
+Build from source instead of downloading: `npm install && npm run build`, then load the `dist` folder the same way.
+
+Every push to `master` publishes itself (`.github/workflows/publish.yml`): the unit tests run, the extension is built and zipped, the zip becomes a GitHub Release named after the version in `static/manifest.json`, and the download page in `site/` goes to GitHub Pages at [www.mosambiswas.com/fill.ai](https://www.mosambiswas.com/fill.ai/). Bump the version for a new release; a push without a bump replaces the zip in the current one. The Download button always points at the latest release.
+
 ```bash
+npm run site     # what the workflow builds: release/fill-ai.zip and the page in _site/
 npm run dev      # rebuild dist/ on every change (then reload the extension)
 npm test         # unit tests: matcher, guards, PDF text layout, context sizing
 npm run e2e      # loads the real extension in Chrome against a mock of all three AIs and drives it
