@@ -6,7 +6,10 @@
 // is the classic trick for harvesting autofill data.
 
 import { clean } from '../shared/text.js';
-import { closePopup, keepScroll, openOptions, optionText, realClick, visibleOptions, waitFor } from './dom.js';
+import { detectFormat, formatName } from '../shared/dates.js';
+import { closePopup, controlText, isOn, keepScroll, openOptions, optionText, realClick, visibleOptions, waitFor } from './dom.js';
+
+export { isOn };
 
 const CONTROLS = [
   'input',
@@ -49,6 +52,14 @@ function idFor(el) {
 
 export function entry(id) {
   return registry.get(id);
+}
+
+// What each field showed right after Fill.ai filled it. A value that still
+// matches came from Fill.ai, not from the person.
+export const written = new Map();
+
+export function answerKey(value) {
+  return JSON.stringify(Array.isArray(value) ? [...value].sort() : value ?? '');
 }
 
 export function isKnown(el) {
@@ -284,6 +295,8 @@ function inlineText(input) {
 }
 
 function ariaOptionText(el) {
+  // Google Forms' "Other:" choice carries this internal value.
+  if (el.getAttribute('data-value') === '__other_option__') return 'Other';
   return clean(el.getAttribute('aria-label') || el.getAttribute('data-value') || el.getAttribute('data-answer-value') || textFrom(el) || textFrom(el.closest('label')));
 }
 
@@ -350,11 +363,53 @@ function kindOf(el) {
   if (role === 'combobox' || (tag === 'BUTTON' && el.getAttribute('aria-haspopup') === 'listbox')) {
     return el.querySelector('input, textarea') ? null : 'dropdown';
   }
-  if (el.isContentEditable || role === 'textbox') {
+  // Only something the person could type into. A role=textbox that is not
+  // editable is a display: Select2 shows the chosen city in one, and typing
+  // "at" it once sent the text into the previous field instead.
+  if (el.isContentEditable) {
     if (el.parentElement?.closest('[contenteditable="true"], [contenteditable=""]')) return null;
     return 'richtext';
   }
   return null;
+}
+
+// ---------------------------------------------------------------- enhanced selects
+
+// Select2, Chosen, Tom Select, selectize and friends hide the real <select>
+// and draw their own box beside it. The hidden select is still what the page
+// submits, so Fill.ai treats it as the question and the drawn box only as the
+// place it lives on screen. Everything inside the box is the widget's own
+// machinery, not more questions.
+const WIDGET_CLASS = /(^|\s)(select2-container|select2|chosen-container|selectize-control|ts-wrapper|choices|bootstrap-select)(\s|$)/;
+const WIDGET_POPUP = '.select2-dropdown, .select2-container--open, .chosen-drop, .ts-dropdown, .selectize-dropdown';
+
+function widgetFor(select) {
+  if (select.tagName !== 'SELECT' || rendered(select)) return null;
+  const next = select.nextElementSibling;
+  const candidates = [next, select.parentElement, select.closest('.choices, .bootstrap-select')];
+  for (const c of candidates) {
+    if (!c || c.id === PANEL_HOST_ID) continue;
+    const cls = typeof c.className === 'string' ? c.className : '';
+    const looksLike = WIDGET_CLASS.test(cls) || (c === next && !!c.querySelector('[role="combobox"], [aria-haspopup]'));
+    if (looksLike && rendered(c)) return c;
+  }
+  return null;
+}
+
+function findWidgets() {
+  const map = new Map();
+  for (const select of queryAll('select')) {
+    const w = widgetFor(select);
+    if (w) map.set(select, w);
+  }
+  return map;
+}
+
+function insideWidget(el, widgets) {
+  if (widgets.has(el)) return false;
+  if (el.closest(WIDGET_POPUP)) return true;
+  for (const w of widgets.values()) if (w.contains(el)) return true;
+  return false;
 }
 
 // A listbox that is only the popup of some combobox is not its own question.
@@ -403,13 +458,18 @@ function containerFor(members) {
 
 // ---------------------------------------------------------------- values
 
-function currentOf(item) {
-  const { kind, el, members, options } = item;
+// The chosen options of a native select, placeholders left out.
+function chosenTexts(select) {
+  return [...select.options].filter((o, i) => o.selected && !(i === 0 && o.disabled) && !(!o.value && PLACEHOLDER_OPTION.test(clean(o.textContent)))).map((o) => clean(o.textContent) || o.value);
+}
+
+export function currentOf(item) {
+  const { kind, el, members } = item;
+  if (el?.tagName === 'SELECT') {
+    const chosen = chosenTexts(el);
+    return item.multiple ? chosen : chosen[0] || '';
+  }
   switch (kind) {
-    case 'select': {
-      const opt = el.options[el.selectedIndex];
-      return opt && options.some((o) => o.index === el.selectedIndex) ? clean(opt.textContent) : '';
-    }
     case 'radio':
       return members.find((m) => isOn(m.el))?.text || '';
     case 'checkboxes':
@@ -429,36 +489,68 @@ function currentOf(item) {
       return el.files && el.files.length ? el.files[0].name : '';
     case 'richtext':
       return textFrom(el);
+    case 'combobox': {
+      // react-select and friends show the choice beside an empty search box.
+      if (el.value) return el.value;
+      const box = el.closest('[class*="control"], [class*="Control"]');
+      const t = box ? controlText(el) : '';
+      return t && t.length < 120 && !PLACEHOLDER_OPTION.test(t) && !GENERIC_LABEL.test(t) && t !== item.label ? t : '';
+    }
     default:
       return el.value || '';
   }
 }
 
-export function isOn(el) {
-  if (el.tagName === 'INPUT') return el.checked;
-  return el.getAttribute('aria-checked') === 'true';
+function hasValue(v) {
+  return Array.isArray(v) ? v.length > 0 : !!String(v ?? '').trim();
+}
+
+// Was this answer put here by the person? With the touch tracker loaded
+// (every page opened after Fill.ai was installed) that is exactly the
+// fields they changed by hand. Without it, anything that differs from how
+// the page first arrived counts, so nothing typed gets overwritten.
+function mineState(item) {
+  if (!hasValue(item.current)) return null;
+  if (written.has(item.id) && written.get(item.id) === answerKey(item.current)) return null;
+  const tracker = window.__fillaiTouch;
+  if (tracker) {
+    const els = [item.el, item.container, ...(item.members || []).map((m) => m.el)].filter(Boolean);
+    return els.some((e) => tracker.has(e)) ? 'typed' : null;
+  }
+  if (item.el?.tagName === 'SELECT') return pageDefault(item.el) ? null : 'kept';
+  if (item.members?.some((m) => m.el.tagName === 'INPUT')) return item.members.some((m) => m.el.checked !== m.el.defaultChecked) ? 'kept' : null;
+  return 'kept';
+}
+
+function pageDefault(select) {
+  const opts = [...select.options];
+  if (select.multiple) return opts.every((o) => o.selected === o.defaultSelected);
+  const defaults = opts.filter((o) => o.defaultSelected);
+  return defaults.length ? defaults.at(-1).selected : select.selectedIndex <= 0;
 }
 
 // ---------------------------------------------------------------- scan
 
 const seen = new WeakSet(); // every control a scan has already reported
 
-function usable(el) {
+function usable(el, widgets) {
   if (el.closest(`#${PANEL_HOST_ID}`)) return null;
   const raw = kindOf(el);
   if (!raw) return null;
-  if (el.disabled || el.getAttribute('aria-disabled') === 'true' || el.readOnly) return null;
+  if (el.disabled || el.getAttribute('aria-disabled') === 'true' || el.readOnly || el.getAttribute('aria-readonly') === 'true') return null;
   if (raw === 'listbox' && isPopupList(el)) return null;
-  if (!visibleControl(el)) return null;
+  if (insideWidget(el, widgets)) return null;
+  if (!visibleControl(el) && !widgets.has(el)) return null;
   return raw;
 }
 
 // How many questions have appeared since the last scan (multi-page forms).
 export function countNew() {
   const keys = new Set();
+  const widgets = findWidgets();
   for (const el of queryAll(CONTROLS)) {
     if (seen.has(el)) continue;
-    const raw = usable(el);
+    const raw = usable(el, widgets);
     if (!raw) continue;
     if (raw === 'radio' || raw === 'aria-radio') keys.add(groupKey(el, 'radio'));
     else if (raw === 'checkbox' || raw === 'aria-checkbox') keys.add(groupKey(el, 'checkbox'));
@@ -471,9 +563,10 @@ export async function scanPage() {
   const headings = headingsIn();
   const items = [];
   const groups = new Map(); // container or name -> item
+  const widgets = findWidgets();
 
   for (const el of queryAll(CONTROLS)) {
-    const raw = usable(el);
+    const raw = usable(el, widgets);
     if (!raw) continue;
     seen.add(el);
 
@@ -490,17 +583,18 @@ export async function scanPage() {
       group.members.push({ el, text });
       continue;
     }
-    items.push({ el, raw });
+    items.push({ el, raw, widget: widgets.get(el) });
   }
 
   registry.clear();
   const fields = [];
   for (const it of items) {
-    const item = it.group ? fromGroup(it.group) : fromSingle(it.el, it.raw);
+    const item = it.group ? fromGroup(it.group) : fromSingle(it.el, it.raw, it.widget);
     if (!item) continue;
     item.label = item.label || 'Unlabelled field';
     item.section = sectionFor(item.anchor, headings, item.label);
     item.current = currentOf(item);
+    item.mine = mineState(item);
     registry.set(item.id, item);
   }
   await probeAll([...registry.values()]);
@@ -515,7 +609,7 @@ export async function scanPage() {
 const MAX_OPTIONS = 60;
 
 async function probeAll(items) {
-  const targets = items.filter((it) => (it.kind === 'combobox' || it.kind === 'dropdown') && !it.options);
+  const targets = items.filter((it) => (it.kind === 'combobox' || it.kind === 'dropdown') && !it.options && !it.widget && !it.mine);
   if (!targets.length) return;
   const { scrollX, scrollY } = window;
   const focused = document.activeElement;
@@ -569,11 +663,14 @@ function fromGroup(group) {
   };
 }
 
-function fromSingle(el, raw) {
+function fromSingle(el, raw, widget) {
   const label = labelFor(el);
-  const base = { id: idFor(el), el, anchor: el, label, required: isRequired(el, label) };
+  const base = { id: idFor(el), el, anchor: widget || el, widget, label, required: isRequired(el, label) };
   if (raw === 'select') {
     const options = selectOptions(el);
+    // A Select2 box that loads its list as you type (or once another answer
+    // is chosen) has nothing to offer yet: the answer is typed, then picked.
+    if (widget && options.length < 2) return { ...base, kind: 'combobox', multiple: el.multiple };
     return { ...base, kind: 'select', selectOptions: options, options: options.map((o) => o.text), multiple: el.multiple };
   }
   if (raw === 'listbox') {
@@ -597,18 +694,34 @@ function describe(item) {
   if (item.multiple) field.multiple = true;
   if (item.required) field.required = true;
   if (item.current && (!Array.isArray(item.current) || item.current.length)) field.current = item.current;
+  if (item.mine) field.mine = item.mine;
   const format = {};
   if (el?.maxLength > 0 && el.maxLength < 100000) format.maxLength = el.maxLength;
   if (el?.getAttribute?.('pattern')) format.pattern = el.getAttribute('pattern');
   if (el?.getAttribute?.('min')) format.min = el.getAttribute('min');
   if (el?.getAttribute?.('max')) format.max = el.getAttribute('max');
   if (item.kind === 'file' && el.accept) format.accept = el.accept;
+  const date = dateHint(item, field);
+  if (date) format.date = date;
   if (Object.keys(format).length) field.format = format;
   const name = el?.getAttribute?.('name');
   if (name) field.name = name;
   const autocomplete = el?.getAttribute?.('autocomplete');
   if (autocomplete && autocomplete !== 'off' && autocomplete !== 'on') field.autocomplete = autocomplete;
   return field;
+}
+
+// A date format the field states anywhere: placeholder, input mask
+// attributes, hint text or the label ("Date of birth (DD/MM/YYYY)").
+const MASK_ATTRS = ['data-mask', 'data-inputmask', 'data-inputmask-inputformat', 'data-date-format', 'data-format', 'data-dateformat'];
+
+function dateHint(item, field) {
+  const el = item.el;
+  if (!el || !['text', 'tel', 'combobox'].includes(item.kind)) return '';
+  const attrs = MASK_ATTRS.map((a) => el.getAttribute(a)).filter(Boolean);
+  const fmt = detectFormat(field.placeholder, ...attrs, field.label, field.description);
+  item.dateFormat = fmt;
+  return formatName(fmt);
 }
 
 // What the model needs to know about the page itself (top frame only).

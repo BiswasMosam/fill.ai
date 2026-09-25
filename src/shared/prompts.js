@@ -32,7 +32,7 @@ export const ANSWERS_SCHEMA = {
 
 const FORM_RULES = `You fill in web forms for one person, using only what their profile says about them.
 
-The profile below has two kinds of knowledge: sections read from their resume and other documents, and \`facts\`, answers they typed into earlier forms and chose to keep. Facts are the person's own words and win when the two disagree.
+The profile below has two kinds of knowledge: sections read from their resume and other documents, and \`facts\`, answers they gave in earlier forms themselves. Facts are the person's own words and win when the two disagree.
 
 For every field in the form, return one answer with a status:
 
@@ -46,7 +46,7 @@ For every field in the form, return one answer with a status:
 Values:
 - Choice fields list \`options\`. Single choice: \`value\` is one option copied exactly. Multiple choice (\`multiple: true\`): every selected option, copied exactly, goes in \`values\`. If no option honestly fits, use ask.
 - A \`checkbox\` field is a single box: answer "Yes" to tick it or "No" to leave it.
-- Match the field's format: \`date\` takes YYYY-MM-DD, \`month\` takes YYYY-MM, and placeholders or patterns such as DD/MM/YYYY win. If the profile only has month and year but the field needs a day, use ask.
+- Dates: a field with \`date: true\` always gets YYYY-MM-DD, whatever the page shows (DD/MM/YYYY, DD/MM/YY and so on). Fill.ai rewrites it in the field's own format. \`month\` fields take YYYY-MM. If the profile only has month and year but the field needs a day, use ask.
 - Split or join names to fit the field. Keep the phone number as stored unless the field's hint asks for another shape.
 - Links are full URLs starting with https://.
 - \`file\` fields: fill with value "resume" only when the field clearly wants a resume or CV and \`resume_on_file\` is true. Other uploads are asks.
@@ -75,7 +75,7 @@ export const PROFILE_SYSTEM = `You turn a person's documents (resume, portfolio,
 
 - Record only what the documents state. Don't infer, embellish or fill gaps. Anything missing stays an empty string or an empty list.
 - Keep their own wording for achievements and descriptions. Only tidy formatting noise such as stray bullets or broken line wraps.
-- Dates: YYYY-MM when month and year are known, YYYY when only the year is. Ongoing roles get "Present" as the end and is_current true.
+- Dates: YYYY-MM when month and year are known, YYYY when only the year is. Ongoing roles get "Present" as the end and is_current true. A date of birth is YYYY-MM-DD.
 - Split full_name into first, middle and last names as written. Take the name from where the document presents the person, never from an email address or a web address.
 - Text set in capitals only for design (names, headings, schools, companies, job titles) goes in normal capitalisation: "Mosam Biswas", "Software Developer Intern". Keep real acronyms such as AI, IEEE or HSC in capitals.
 - Keep the phone number's country code if one is given.

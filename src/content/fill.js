@@ -2,19 +2,27 @@
 // Google Forms all notice. Every fill is read back; anything that did not
 // stick is reported instead of assumed.
 
-import { entry, isOn } from './scan.js';
-import { clean, matchOption, norm } from '../shared/text.js';
-import { closePopup, controlText, keepScroll, openOptions, optionText, realClick, sleep, visibleOptions, waitFor } from './dom.js';
+import { answerKey, currentOf, entry, isOn, written } from './scan.js';
+import { clean, digits, matchOption, norm } from '../shared/text.js';
+import { formatDate, parseDate, sameDate } from '../shared/dates.js';
+import {
+  closePopup,
+  controlText,
+  deepActive,
+  keepScroll,
+  openOptions,
+  optionText,
+  realClick,
+  setNativeValue,
+  sleep,
+  typeKeys,
+  visibleOptions,
+  waitFor,
+} from './dom.js';
 
 const snapshots = new Map(); // id -> how the field looked before Fill.ai touched it
 
 // ---------------------------------------------------------------- primitives
-
-function setNativeValue(el, value) {
-  const proto =
-    el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
-  Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
-}
 
 function typeInto(el, value, { blur = true } = {}) {
   el.focus({ preventScroll: true });
@@ -47,6 +55,21 @@ function stuck(control, picked) {
   return shown.includes(want) || want.includes(shown);
 }
 
+// How close is what the page kept to what was typed?
+//   ok    - the same, or the same after the page's own formatting
+//   close - trimmed or decorated ("https://" dropped, a suffix added)
+//   bad   - something else
+function judge(got, want) {
+  if (got === want) return 'ok';
+  if (!got) return 'empty';
+  const g = norm(got);
+  const w = norm(want);
+  if (g === w) return 'ok';
+  if (/\d/.test(want) && digits(got) === digits(want) && digits(want).length >= 3) return 'ok';
+  if (g && w && (g.includes(w) || (w.includes(g) && g.length >= w.length * 0.6))) return 'close';
+  return 'bad';
+}
+
 // ---------------------------------------------------------------- per kind
 
 // Listboxes and button dropdowns: open, click the option, check it.
@@ -60,8 +83,16 @@ async function pickFromPopup(control, wanted) {
   }
   const text = optionText(opt);
   realClick(opt);
+  if (control.getAttribute('role') === 'listbox') {
+    // Google Forms marks the chosen option; wait for it rather than assume.
+    const took = await waitFor(() => {
+      const sel = control.querySelector('[role="option"][aria-selected="true"]');
+      return sel ? norm(optionText(sel)) === norm(text) : stuck(control, text);
+    }, 1200);
+    if (openOptions(control, before).length) await closePopup(control, before);
+    return took ? '' : 'The page would not take that option.';
+  }
   await sleep(250);
-  if (control.getAttribute('role') === 'listbox') return '';
   return stuck(control, text) ? '' : 'The page would not take that option.';
 }
 
@@ -88,6 +119,160 @@ async function fillCombobox(el, wanted) {
   return stuck(el, text) ? '' : 'The page would not take that option.';
 }
 
+// ---------------------------------------------------------------- native and enhanced selects
+
+function liveOptions(select) {
+  return [...select.options]
+    .map((o, index) => ({ text: clean(o.textContent) || o.value, value: o.value, index, placeholder: !o.value && /^(select|choose|pick|please|--|—|-|\s*$)/i.test(clean(o.textContent)) }))
+    .filter((o) => !o.placeholder && (o.text || o.value));
+}
+
+function chosen(select) {
+  return [...select.selectedOptions].map((o) => norm(o.textContent || o.value));
+}
+
+// Set a native <select> the way its own change handler expects. Select2 and
+// Chosen listen for exactly this and redraw their box.
+// Returns the (normalised) texts it picked, or null when nothing matched.
+function setSelect(el, opts, wanted) {
+  const texts = opts.map((o) => o.text);
+  const picks = [...new Set(wanted.map((v) => matchOption(texts, v)).filter((i) => i !== -1))];
+  if (!picks.length || (!el.multiple && picks.length > 1)) return null;
+  if (el.multiple) {
+    opts.forEach((o, i) => (el.options[o.index].selected = picks.includes(i)));
+  } else {
+    setNativeValue(el, opts[picks[0]].value);
+    el.selectedIndex = opts[picks[0]].index;
+  }
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  el.dispatchEvent(new Event('chosen:updated', { bubbles: true }));
+  return picks.map((i) => norm(texts[i]));
+}
+
+function widgetShows(widget, texts) {
+  const shown = norm(widget.textContent);
+  return texts.every((t) => shown.includes(t));
+}
+
+async function fillSelect(item, value, values) {
+  const { el } = item;
+  const opts = liveOptions(el);
+  const wanted = el.multiple ? (values.length ? values : [value].filter(Boolean)) : [value];
+  const took = (picked) => picked && picked.every((t) => chosen(el).includes(t));
+  if (!item.widget) {
+    el.focus({ preventScroll: true });
+    const picked = setSelect(el, opts, wanted);
+    el.blur();
+    if (!picked) return 'No matching option.';
+    return took(picked) ? '' : 'The page would not take that option.';
+  }
+  // Select2 and friends: the hidden select first, then check the box they
+  // draw agrees. A list that only loads as you type needs the box itself.
+  const picked = setSelect(el, opts, wanted);
+  if (took(picked)) {
+    await sleep(60);
+    if (widgetShows(item.widget, picked)) return '';
+  }
+  if (el.multiple) return 'Pick these in the list yourself.';
+  return pickInWidget(item, value);
+}
+
+async function pickInWidget(item, wanted) {
+  const { el, widget } = item;
+  const control = widget.querySelector('[role="combobox"], [aria-haspopup], button, input:not([type="hidden"])') || widget;
+  const before = visibleOptions();
+  realClick(control);
+  let opt = await waitFor(() => findOption(control, wanted, before), 700);
+  if (!opt) {
+    // Most of these open a search box and put the cursor in it.
+    const active = deepActive();
+    const search = active?.tagName === 'INPUT' && active !== el ? active : widget.querySelector('input:not([type="hidden"])');
+    if (search) {
+      typeInto(search, wanted, { blur: false });
+      opt = await waitFor(() => findOption(search, wanted, before) || findOption(control, wanted, before), 3000);
+    }
+  }
+  if (!opt) {
+    await closePopup(control, before);
+    pressEscapeIn(control);
+    return 'Could not find that option in the list.';
+  }
+  const text = optionText(opt);
+  realClick(opt);
+  const took = await waitFor(() => chosen(el).includes(norm(text)) || widgetShows(widget, [norm(text)]), 1500);
+  if (openOptions(control, before).length) await closePopup(control, before);
+  return took ? '' : 'The page would not take that option.';
+}
+
+function pressEscapeIn(el) {
+  el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', keyCode: 27, bubbles: true, composed: true }));
+}
+
+// ---------------------------------------------------------------- text and dates
+
+async function fillText(el, value) {
+  typeInto(el, value);
+  await sleep(0);
+  let verdict = judge(el.value, value);
+  // A masked or otherwise fussy input: type it the way a keyboard would.
+  if ((verdict === 'bad' || verdict === 'empty') && (await typeKeys(el, value))) {
+    await sleep(0);
+    verdict = judge(el.value, value);
+  }
+  if (verdict === 'ok' || verdict === 'close') return '';
+  if (!el.value) return 'The page cleared the value.';
+  return `The page changed it to "${clean(el.value).slice(0, 40)}". Check it.`;
+}
+
+// The field's own date format when it states one. Otherwise day first with
+// a 4-digit year, then with 2 digits: a mask built for "20/07/04" turns
+// "20/07/2004" into 20 July 2020, and reading it back catches that.
+const GUESSES = [
+  { order: 'DMY', sep: '/', year: 4 },
+  { order: 'DMY', sep: '/', year: 2 },
+];
+
+async function fillDate(item, iso) {
+  const { el } = item;
+  const want = parseDate(iso, 'YMD');
+  if (!want) return fillText(el, iso);
+  if (el.type === 'date') return fillText(el, iso);
+  for (const fmt of item.dateFormat ? [item.dateFormat] : GUESSES) {
+    const text = formatDate(want, fmt);
+    typeInto(el, text);
+    await sleep(0);
+    if (sameDate(parseDate(el.value, fmt.order), want)) return { error: '', shown: el.value };
+    await typeKeys(el, text);
+    await sleep(0);
+    if (sameDate(parseDate(el.value, fmt.order), want)) return { error: '', shown: el.value };
+  }
+  if (!el.value) return 'The page would not take the date.';
+  return `The page changed the date to "${clean(el.value).slice(0, 20)}". Check it.`;
+}
+
+async function fillRichText(el, value) {
+  // Only type where the cursor really is. execCommand writes into whatever
+  // holds the selection, and a field that can't take focus would send the
+  // text somewhere else on the page.
+  if (!el.isContentEditable) return 'Fill.ai cannot type into this field.';
+  el.focus({ preventScroll: true });
+  const active = deepActive();
+  if (active !== el && !el.contains(active)) return 'Could not put the cursor in this field.';
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const sel = document.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  const ok = document.execCommand('insertText', false, value);
+  if (!ok || clean(el.innerText) !== clean(value)) {
+    el.textContent = value;
+    el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
+  }
+  el.blur();
+  return clean(el.innerText) === clean(value) ? '' : 'The page would not take the text.';
+}
+
 async function attachResume(el) {
   const { resumeFile } = await chrome.storage.local.get('resumeFile');
   if (!resumeFile?.data) return 'No resume file saved in Fill.ai.';
@@ -102,13 +287,12 @@ async function attachResume(el) {
 }
 
 function snapshot(item) {
+  if (item.el?.tagName === 'SELECT') return { select: [...item.el.options].map((o) => o.selected) };
   switch (item.kind) {
     case 'radio':
     case 'checkboxes':
     case 'checkbox':
       return { on: item.members.map((m) => isOn(m.el)) };
-    case 'select':
-      return { value: item.el.value };
     case 'richtext':
       return { text: item.el.innerText };
     case 'listbox':
@@ -120,30 +304,11 @@ function snapshot(item) {
   }
 }
 
-async function fillOne(item, { value, values }) {
+async function fillOne(item, { value, values, date }) {
   const { kind, el } = item;
+  if (el.tagName === 'SELECT') return fillSelect(item, value, values);
+  if (date && ['text', 'tel', 'date'].includes(kind)) return fillDate(item, date);
   switch (kind) {
-    case 'select': {
-      const opts = item.selectOptions;
-      if (el.multiple) {
-        for (const o of opts) el.options[o.index].selected = values.some((v) => matchOption([o.text], v) === 0);
-        el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.dispatchEvent(new Event('change', { bubbles: true }));
-        return '';
-      }
-      const i = matchOption(
-        opts.map((o) => o.text),
-        value,
-      );
-      if (i === -1) return 'No matching option.';
-      el.focus({ preventScroll: true });
-      setNativeValue(el, opts[i].value);
-      el.selectedIndex = opts[i].index;
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.dispatchEvent(new Event('change', { bubbles: true }));
-      el.blur();
-      return el.selectedIndex === opts[i].index ? '' : 'The page would not take that option.';
-    }
     case 'radio': {
       const i = matchOption(
         item.members.map((m) => m.text),
@@ -179,25 +344,10 @@ async function fillOne(item, { value, values }) {
       return fillCombobox(el, value);
     case 'file':
       return attachResume(el);
-    case 'richtext': {
-      el.focus();
-      document.execCommand('selectAll', false);
-      const ok = document.execCommand('insertText', false, value);
-      if (!ok || clean(el.innerText) !== clean(value)) {
-        el.textContent = value;
-        el.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value }));
-      }
-      el.blur();
-      return '';
-    }
-    default: {
-      typeInto(el, value);
-      await sleep(0);
-      if (el.value === value) return '';
-      // Masked inputs reformat what they get ("98765 43210"); same digits is fine.
-      if (el.value && el.value.replace(/\D/g, '') === value.replace(/\D/g, '') && /\d/.test(value)) return '';
-      return el.value ? '' : 'The page cleared the value.';
-    }
+    case 'richtext':
+      return fillRichText(el, value);
+    default:
+      return fillText(el, value);
   }
 }
 
@@ -217,6 +367,21 @@ export async function fillMany(items) {
   }
 }
 
+async function fillEach(item, it) {
+  try {
+    const out = await fillOne(item, it);
+    const error = typeof out === 'string' ? out : out.error;
+    const result = { id: it.id, ok: !error, error };
+    if (!error) {
+      written.set(it.id, answerKey(currentOf(item)));
+      if (out?.shown) result.shown = out.shown;
+    }
+    return result;
+  } catch (err) {
+    return { id: it.id, ok: false, error: err?.message || 'Could not fill this field.' };
+  }
+}
+
 async function fillAll(items) {
   const results = [];
   for (const it of items) {
@@ -226,11 +391,19 @@ async function fillAll(items) {
       continue;
     }
     if (!snapshots.has(it.id)) snapshots.set(it.id, snapshot(item));
-    try {
-      const error = await fillOne(item, it);
-      results.push({ id: it.id, ok: !error, error });
-    } catch (err) {
-      results.push({ id: it.id, ok: false, error: err?.message || 'Could not fill this field.' });
+    results.push(await fillEach(item, it));
+  }
+  // One answer can undo another: choosing a country reloads the city list,
+  // a masked field reformats on blur. Look at everything once more and fill
+  // again whatever changed after it was filled.
+  if (items.length > 1) {
+    await sleep(150);
+    for (const [i, it] of items.entries()) {
+      if (!results[i].ok) continue;
+      const item = entry(it.id);
+      if (!item?.el.isConnected || answerKey(currentOf(item)) === written.get(it.id)) continue;
+      const again = await fillEach(item, it);
+      results[i] = again.ok ? again : { ...again, error: `${again.error || 'It changed after another answer went in.'} Check it.` };
     }
   }
   return results;
@@ -246,7 +419,11 @@ export async function undoMany(ids) {
       continue;
     }
     try {
-      if (snap.on) {
+      if (snap.select) {
+        snap.select.forEach((on, i) => (item.el.options[i].selected = on));
+        item.el.dispatchEvent(new Event('input', { bubbles: true }));
+        item.el.dispatchEvent(new Event('change', { bubbles: true }));
+      } else if (snap.on) {
         for (const [i, m] of item.members.entries()) {
           if (isOn(m.el) === snap.on[i]) continue;
           if (m.el.tagName === 'INPUT' && m.el.type === 'radio' && !snap.on[i]) {
@@ -254,9 +431,6 @@ export async function undoMany(ids) {
             m.el.dispatchEvent(new Event('change', { bubbles: true }));
           } else toggle(m.el);
         }
-      } else if (item.kind === 'select') {
-        setNativeValue(item.el, snap.value);
-        item.el.dispatchEvent(new Event('change', { bubbles: true }));
       } else if (item.kind === 'file') {
         item.el.files = new DataTransfer().files;
         item.el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -267,6 +441,7 @@ export async function undoMany(ids) {
         typeInto(item.el, snap.value);
       }
       snapshots.delete(id);
+      written.delete(id);
       results.push({ id, ok: true });
     } catch {
       results.push({ id, ok: false });
@@ -277,10 +452,11 @@ export async function undoMany(ids) {
 
 // ---------------------------------------------------------------- highlights
 
-const COLORS = { fill: '#8b7bff', ask: '#f5b544', draft: '#5cc8ff', sensitive: '#ff7a9a', consent: '#ff7a9a' };
+const COLORS = { fill: '#8b7bff', ask: '#f5b544', draft: '#5cc8ff', sensitive: '#ff7a9a', consent: '#ff7a9a', mine: '#4fd1a5' };
 const marked = new Map(); // element -> original inline styles
 
 function markTarget(item) {
+  if (item.widget) return item.widget;
   if (item.kind === 'radio' || item.kind === 'checkboxes') return item.container || item.el.parentElement;
   if (item.kind === 'checkbox') return item.el.closest('label') || item.el.parentElement || item.el;
   if (item.kind === 'file') return item.el.labels?.[0] || item.el.parentElement;

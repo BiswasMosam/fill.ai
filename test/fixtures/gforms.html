@@ -8,6 +8,11 @@
   titles are role=heading, choices are divs with role=radio / role=checkbox and
   aria-checked, and dropdowns are role=listbox with a popup of role=option.
   No native radios, checkboxes or selects anywhere.
+
+  The dropdown copies the real thing (read off a live form in September 2026):
+  the listbox only opens when the click comes from inside its first child
+  (jsaction="click:cOuCgd(LgbsSe)"), its popup lives inside it and holds
+  copies of the options, and an "Other" choice is data-value="__other_option__".
 -->
 <style>
   body { font: 14px/1.5 Roboto, system-ui, sans-serif; background: #f0ebf8; margin: 0; color: #202124; }
@@ -25,9 +30,10 @@
   [aria-checked=true] .mark { border-color: #673ab7; background: radial-gradient(circle, #673ab7 45%, transparent 50%); }
   [role=checkbox][aria-checked=true] .mark { background: #673ab7; }
   [role=listbox] { display: inline-flex; min-width: 180px; border: 1px solid #dadce0; border-radius: 4px; padding: 8px 12px; cursor: pointer; position: relative; }
-  [role=listbox] [role=option] { display: none; }
-  [role=listbox] [role=option][aria-selected=true] { display: block; }
-  .popup { position: absolute; background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.25); border-radius: 4px; padding: 6px 0; z-index: 5; }
+  .lgbsse { flex: 1; }
+  .lgbsse [role=option] { display: none; }
+  .lgbsse [role=option][aria-selected=true] { display: block; }
+  .popup { position: absolute; left: 0; top: 0; min-width: 100%; background: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.25); border-radius: 4px; padding: 6px 0; z-index: 5; }
   .popup [role=option] { padding: 8px 16px; cursor: pointer; }
   .popup [role=option]:hover { background: #f1f3f4; }
   [role=button] { display: inline-block; background: #673ab7; color: #fff; padding: 8px 24px; border-radius: 4px; cursor: pointer; }
@@ -65,12 +71,41 @@
     </div>
     <div role="listitem" class="q">
       <div role="heading" aria-level="3" id="h-country">Country</div>
-      <div role="listbox" aria-labelledby="h-country" tabindex="0" id="country">
-        <div role="option" data-value="" aria-selected="true"><span>Choose</span></div>
-        <div role="option" data-value="India" aria-selected="false"><span>India</span></div>
-        <div role="option" data-value="Indonesia" aria-selected="false"><span>Indonesia</span></div>
-        <div role="option" data-value="Other" aria-selected="false"><span>Other</span></div>
+      <div role="listbox" aria-labelledby="h-country" aria-expanded="false" tabindex="0" id="country">
+        <div class="lgbsse" role="presentation"><div role="presentation">
+          <div role="option" data-value="" aria-selected="true"><span>Choose</span></div>
+          <div role="option" data-value="India" aria-selected="false"><span>India</span></div>
+          <div role="option" data-value="Indonesia" aria-selected="false"><span>Indonesia</span></div>
+          <div role="option" data-value="Other" aria-selected="false"><span>Other</span></div>
+        </div></div>
+        <div class="popup" role="presentation" style="display:none"></div>
       </div>
+    </div>
+    <div role="listitem" class="q">
+      <div role="heading" aria-level="3" id="h-batch">Preferred batch</div>
+      <div role="listbox" aria-labelledby="h-batch" aria-expanded="false" tabindex="0" id="batch">
+        <div class="lgbsse" role="presentation"><div role="presentation">
+          <div role="option" data-value="" aria-selected="true"><span>Choose</span></div>
+          <div role="option" data-value="Morning" aria-selected="false"><span>Morning</span></div>
+          <div role="option" data-value="Evening" aria-selected="false"><span>Evening</span></div>
+          <div role="option" data-value="Weekend" aria-selected="false"><span>Weekend</span></div>
+        </div></div>
+        <div class="popup" role="presentation" style="display:none"></div>
+      </div>
+    </div>
+    <div role="listitem" class="q">
+      <div role="heading" aria-level="3" id="h-hear">How did you hear about us?</div>
+      <div role="radiogroup" aria-labelledby="h-hear">
+        <div role="radio" aria-checked="false" data-value="Instagram" aria-label="Instagram" tabindex="0"><div class="mark"></div><span>Instagram</span></div>
+        <div role="radio" aria-checked="false" data-value="LinkedIn" aria-label="LinkedIn" tabindex="0"><div class="mark"></div><span>LinkedIn</span></div>
+        <div role="radio" aria-checked="false" data-value="A friend" aria-label="A friend" tabindex="0" id="hear-friend"><div class="mark"></div><span>A friend</span></div>
+        <div role="radio" aria-checked="false" data-value="__other_option__" aria-label="Other:" tabindex="0"><div class="mark"></div><span>Other:</span></div>
+        <input class="t" type="text" aria-label="Other response">
+      </div>
+    </div>
+    <div role="listitem" class="q">
+      <div role="heading" aria-level="3" id="h-dob">Date of birth</div>
+      <input class="t" type="date" aria-labelledby="h-dob">
     </div>
     <div role="listitem" class="q">
       <div role="heading" aria-level="3" id="h-else">Anything else you would like us to know?</div>
@@ -105,26 +140,22 @@
     }
     const popupOption = e.target.closest('.popup [role=option]');
     if (popupOption) {
-      const lb = document.getElementById(popupOption.closest('.popup').dataset.for);
+      const lb = popupOption.closest('[role=listbox]');
       lb.querySelectorAll('[role=option]').forEach((o) => o.setAttribute('aria-selected', String(o.dataset.value === popupOption.dataset.value)));
-      popupOption.closest('.popup').remove();
+      const pop = lb.querySelector('.popup');
+      pop.style.display = 'none';
+      lb.setAttribute('aria-expanded', 'false');
       return;
     }
-    const lb = e.target.closest('[role=listbox]');
-    if (lb && !document.querySelector('.popup')) {
-      const r = lb.getBoundingClientRect();
-      const pop = document.createElement('div');
-      pop.className = 'popup';
-      pop.setAttribute('role', 'presentation');
-      pop.dataset.for = lb.id;
-      pop.style.left = `${r.left + scrollX}px`;
-      pop.style.top = `${r.top + scrollY}px`;
-      lb.querySelectorAll('[role=option]').forEach((o) => {
-        const c = o.cloneNode(true);
-        c.style.display = 'block';
-        pop.appendChild(c);
-      });
-      document.body.appendChild(pop);
+    // Like Google's jsaction: a click on the listbox itself does nothing,
+    // only one that starts inside its first child opens it.
+    const opener = e.target.closest('.lgbsse');
+    const lb = opener?.closest('[role=listbox]');
+    if (lb && lb.getAttribute('aria-expanded') !== 'true') {
+      const pop = lb.querySelector('.popup');
+      pop.replaceChildren(...[...opener.querySelectorAll('[role=option]')].map((o) => o.cloneNode(true)));
+      pop.style.display = 'block';
+      lb.setAttribute('aria-expanded', 'true');
       return;
     }
     if (e.target.closest('#next')) {

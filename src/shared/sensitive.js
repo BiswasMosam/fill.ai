@@ -16,6 +16,7 @@ const NEVER = [
 
 const SENSITIVE = [
   /\b(gender|sex)\b/i,
+  /^\s*(m\s*\/\s*f|f\s*\/\s*m)\s*$/i,
   /\bpronouns?\b/i,
   /\b(race|racial|ethnic|ethnicity|hispanic|latino|latina|latinx)\b/i,
   /\bcaste\b/i,
@@ -26,6 +27,7 @@ const SENSITIVE = [
   /\b(veteran|armed forces|military status|protected veteran)\b/i,
   /\bsexual orientation\b|\blgbt/i,
   /\bmarital status\b/i,
+  /\b(salutation|honorific)\b/i,
   /\b(aadhaa?r|pan (card|number|no)|passport (number|no)|ssn|social security|national id|voter id|driving licen[cs]e (number|no))\b/i,
   /\b(criminal|convicted|conviction|felony)\b/i,
 ];
@@ -36,6 +38,8 @@ const SENSITIVE_OPTIONS = [
   /^(sc|st|obc|ews|obc[\s-]?ncl)$/i,
   /^(hindu|muslim|christian|sikh|buddhist|jain)$/i,
   /\b(hispanic|latino|asian|african american|caucasian|two or more races)\b/i,
+  // Mr / Ms / Mrs give away gender and marital status. Never guessed from a name.
+  /^(mr|mrs|ms|miss|mx|master)\.?$/i,
 ];
 
 const CONSENT = [

@@ -302,27 +302,54 @@ try {
 
   // ------------------------------------------------------------------ 3. Google Forms structure
   console.log('\nGoogle Forms style (ARIA radios, checkboxes, listbox, multi-page)');
-  await fullSeed();
+  const DOB_FACT = { question: 'Date of Birth', answer: '2003-02-14', site: '', savedAt: '2026-09-01T00:00:00.000Z' };
+  await fullSeed({ facts: [DOB_FACT] });
+  requests.length = 0;
   const gf = await browser.newPage();
   await gf.goto(`${BASE}/fixtures/gforms.html`);
+  // The person answers one question before opening Fill.ai.
+  await gf.click('#hear-friend');
   await openPanel(gf);
   await waitPanel(gf);
   await sleep(400);
   const g = await gf.evaluate(() => ({
     name: document.querySelector('[aria-labelledby=h-name]').value,
     email: document.querySelector('[aria-labelledby=h-email]').value,
-    year: document.querySelector('[role=radio][aria-checked=true]')?.dataset.value ?? null,
+    year: document.querySelector('[aria-labelledby=h-year] [role=radio][aria-checked=true]')?.dataset.value ?? null,
     langs: [...document.querySelectorAll('[role=checkbox][aria-checked=true]')].map((c) => c.dataset.answerValue),
-    country: document.querySelector('#country [role=option][aria-selected=true]')?.dataset.value ?? null,
-    popupLeftOpen: !!document.querySelector('.popup'),
+    country: document.querySelector('#country .lgbsse [role=option][aria-selected=true]')?.dataset.value ?? null,
+    popupLeftOpen: [...document.querySelectorAll('.popup')].some((p) => p.style.display !== 'none'),
+    hear: document.querySelector('[aria-labelledby=h-hear] [role=radio][aria-checked=true]')?.dataset.value ?? null,
+    dob: document.querySelector('[aria-labelledby=h-dob]').value,
     more: document.querySelector('[aria-labelledby=h-else]').value,
   }));
   check('text questions', g.name === 'Asha Rani Verma' && g.email === 'asha.verma@example.com', [g.name, g.email]);
   check('ARIA radio choice clicked', g.year === 'Graduated', g.year);
   check('ARIA checkboxes ticked', JSON.stringify(g.langs) === '["English","Hindi"]', g.langs);
-  check('listbox dropdown opened and picked', g.country === 'India' && !g.popupLeftOpen, [g.country, g.popupLeftOpen]);
+  check("dropdown that only opens from inside (Google's jsaction) picked", g.country === 'India' && !g.popupLeftOpen, [g.country, g.popupLeftOpen]);
+  check('date question filled from a saved date', g.dob === '2003-02-14', g.dob);
+  check('an answer the person gave first is left alone', g.hear === 'A friend', g.hear);
+  let gFacts = await storageUntil('facts', (f) => f?.some((x) => /hear about/i.test(x.question)));
+  check('and remembered as theirs', gFacts?.some((f) => f.question === 'How did you hear about us?' && f.answer === 'A friend' && f.how === 'typed'), gFacts);
+  const gfReq = formRequests()[0];
+  check('it is not even sent to the AI', gfReq && !formOf(gfReq).fields.some((f) => /hear about/i.test(f.label)), gfReq && formOf(gfReq).fields.map((f) => f.label));
+  check('Google\'s "__other_option__" never shown as an option', !JSON.stringify(gfReq?.body ?? '').includes('__other_option__') && !(await panelAll(gf)).includes('__other_option__'));
+  text = await panelText(gf);
+  check('panel lists it under "You filled these" as remembered', /You filled these[\s\S]*How did you hear about us\?[\s\S]*Remembered/i.test(text), text.slice(-300));
   check('open question left as a draft', g.more === '');
   await gf.screenshot({ path: path.join(OUT, '4-gforms-panel.png') });
+
+  // The reported bug: pick an option in the panel, "Save & fill", and the
+  // Google Forms dropdown must actually take it.
+  const batch = await card(gf, 'Preferred batch');
+  await (await batch.evaluateHandle((c) => [...c.querySelectorAll('.opt span')].find((s) => s.textContent === 'Evening'))).asElement().click();
+  await clickIn(batch, '[data-act=save]');
+  await gf.waitForFunction(() => document.querySelector('#batch .lgbsse [role=option][aria-selected=true]')?.dataset.value === 'Evening', { timeout: 6000 }).catch(() => {});
+  check('Save & fill picks the option in a Google Forms dropdown', (await gf.evaluate(() => document.querySelector('#batch .lgbsse [role=option][aria-selected=true]')?.dataset.value)) === 'Evening');
+  gFacts = await storageUntil('facts', (f) => f?.some((x) => x.question === 'Preferred batch'));
+  check('and remembers it', gFacts?.some((f) => f.question === 'Preferred batch' && f.answer === 'Evening'), gFacts);
+  text = await panelText(gf);
+  check('the card moves to Filled without an error', /Filled[\s\S]*Preferred batch/i.test(text) && !/Could not find that option/.test(text), text.slice(0, 400));
 
   await sleep(800); // Fill.ai holds the scroll position for a moment after filling
   await gf.click('#next');
@@ -334,6 +361,87 @@ try {
   const p2 = await gf.evaluate(() => [document.querySelector('[aria-labelledby=h-li]').value, document.querySelector('[aria-labelledby=h-inst]').value]);
   check('page two filled after "Fill them"', p2[0].includes('linkedin.com') && p2[1] === 'Example Institute of Technology', p2);
   await gf.screenshot({ path: path.join(OUT, '5-gforms-page2.png') });
+
+  // ------------------------------------------------------------------ 3b. Select2 careers page
+  console.log('\nCareers page built on Select2 and an input mask (where LinkedIn got "Indian")');
+  await fullSeed({ facts: [DOB_FACT] });
+  requests.length = 0;
+  const cp = await browser.newPage();
+  await cp.goto(`${BASE}/fixtures/careers.html`);
+  await cp.waitForFunction(() => window.jQuery && document.querySelectorAll('.select2-container').length >= 5);
+  // A few answers typed and picked by hand before Fill.ai is opened.
+  await cp.type('#preferred', 'Ash');
+  await cp.type('#last', 'Verma-Rao');
+  await cp.click('#alt + .select2 .select2-selection');
+  await cp.waitForSelector('.select2-results__option');
+  const yes = await cp.evaluateHandle(() => [...document.querySelectorAll('.select2-results__option')].find((li) => li.textContent.trim() === 'Yes'));
+  await yes.asElement().click();
+  await sleep(200);
+  await openPanel(cp);
+  await waitPanel(cp);
+  await sleep(500);
+  const c = await cp.evaluate(() => {
+    const $ = (id) => document.getElementById(id);
+    const shown = (id) => $(id).nextElementSibling.querySelector('.select2-selection__rendered')?.textContent.replace('×', '').trim();
+    return {
+      li: $('li').value,
+      first: $('first').value,
+      preferred: $('preferred').value,
+      last: $('last').value,
+      alt: $('alt').value,
+      country: [$('country').value, shown('country')],
+      city: [$('city').value, shown('city')],
+      airport: [$('airport').value, shown('airport')],
+      base: $('base').value,
+      nat: [...$('nat').selectedOptions].map((o) => o.value),
+      natShown: $('nat').nextElementSibling.textContent,
+      dob: $('dob').value,
+      title: $('title').value,
+      terms: $('terms').checked,
+      submits: window.__submits || 0,
+    };
+  });
+  const cReq = formRequests()[0];
+  const cLabels = cReq ? formOf(cReq).fields.map((f) => f.label) : [];
+  check('LinkedIn keeps its URL (nothing typed into it later)', c.li === 'https://www.linkedin.com/in/asha-verma-example', c.li);
+  check("Select2's display box is not mistaken for a question", !cLabels.some((l) => /^(Dubai|India|Select an option|Mumbai)$/.test(l)) && cLabels.includes('Preferred work location'), cLabels);
+  check('Select2 country set through its hidden select', c.country[0] === 'India' && c.country[1] === 'India', c.country);
+  check('city picked from a list that only loaded after the country', c.city[0] === 'Pune' && c.city[1] === 'Pune', c.city);
+  check('Select2 that only lists options once you type in it', c.airport[0] === 'Pune (PNQ)' && c.airport[1] === 'Pune (PNQ)', c.airport);
+  check('Select2 multi-select (nationality)', JSON.stringify(c.nat) === '["Indian"]' && c.natShown.includes('Indian'), [c.nat, c.natShown]);
+  check('date of birth goes through a 2-digit-year mask as 14/02/03', c.dob === '14/02/03', c.dob);
+  check('empty questions still filled', c.first === 'Asha', c.first);
+  check('typed answers left exactly as the person wrote them', c.preferred === 'Ash' && c.last === 'Verma-Rao' && c.alt === 'Yes', [c.preferred, c.last, c.alt]);
+  check('and never sent to the AI', !cLabels.includes('Preferred first name') && !cLabels.includes('Last name'), cLabels);
+  const cFacts = await storageUntil('facts', (f) => f?.length >= 4);
+  const has = (q, a) => cFacts?.some((f) => f.question === q && f.answer === a && f.how === 'typed');
+  check('what they typed is remembered', has('Preferred first name', 'Ash') && has('Last name', 'Verma-Rao') && has('Do you want to provide an alternate phone number?', 'Yes'), cFacts);
+  check("what the site set by itself is not", !cFacts?.some((f) => /work location|email/i.test(f.question)), cFacts?.map((f) => f.question));
+  check('Title (Mr/Ms) is a personal question, never guessed', c.title === '' && /Your call[\s\S]*Title/i.test(await panelText(cp)));
+  check('terms never ticked, form never submitted', !c.terms && c.submits === 0, [c.terms, c.submits]);
+  text = await panelText(cp);
+  check('panel shows the kept answers as remembered', /You filled these[\s\S]*Preferred first name[\s\S]*Remembered/i.test(text), text.slice(-400));
+  await cp.screenshot({ path: path.join(OUT, '8-careers-panel.png') });
+
+  // Forget one of them from the panel.
+  check('Forget button found', await press(cp, 'Preferred first name', '[data-act=forget]', '.frow'));
+  const afterForget = await storageUntil('facts', (f) => !f?.some((x) => x.question === 'Preferred first name'));
+  check('Forget removes it from memory', !afterForget?.some((f) => f.question === 'Preferred first name'), afterForget);
+  await cp.waitForFunction(() => /Forgotten/.test(document.querySelector('#fillai-root').shadowRoot.querySelector('.body').innerText), { timeout: 4000 }).catch(() => {});
+  check('and the panel says so', /Forgotten/.test(await panelText(cp)));
+  await cp.close();
+
+  // Next visit: the typed last name is used from memory.
+  const cp2 = await browser.newPage();
+  await cp2.goto(`${BASE}/fixtures/careers.html?run=2`);
+  await cp2.waitForFunction(() => window.jQuery && document.querySelectorAll('.select2-container').length >= 5);
+  await openPanel(cp2);
+  await waitPanel(cp2);
+  await sleep(400);
+  const c2 = await cp2.evaluate(() => [document.getElementById('last').value, document.getElementById('alt').value, document.getElementById('preferred').value]);
+  check('next time, the remembered answers fill the form', c2[0] === 'Verma-Rao' && c2[1] === 'Yes', c2);
+  check('a forgotten answer is not used', c2[2] !== 'Ash', c2[2]);
+  await cp2.close();
 
   // ------------------------------------------------------------------ 4. the other two AIs
   for (const ai of ['gemini', 'claude']) {

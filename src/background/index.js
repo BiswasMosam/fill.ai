@@ -2,11 +2,12 @@
 // frame of the tab, ask the chosen AI, check the answers, fill what passed, report.
 // It holds no state between messages; the panel keeps the picture.
 
-import { getKnowledge, getResumeFile, getSettings, rememberFact } from '../shared/storage.js';
+import { forgetFact, getKnowledge, getResumeFile, getSettings, rememberFact, rememberFacts } from '../shared/storage.js';
 import { isProfileEmpty } from '../shared/schema.js';
 import { askJson, isConnected } from '../shared/ai/index.js';
 import { ANSWERS_SCHEMA, formSystemPrompt, formUserContent } from '../shared/prompts.js';
-import { modelView, prepareFields, validateAnswers } from '../shared/matcher.js';
+import { keepMine, learnFrom, modelView, prepareFields, validateAnswers } from '../shared/matcher.js';
+import { isDateField } from '../shared/dates.js';
 import { textOf } from '../shared/paths.js';
 
 chrome.runtime.onInstalled.addListener(({ reason }) => {
@@ -80,6 +81,9 @@ chrome.runtime.onConnect.addListener((port) => {
         case 'undo':
           await undoOne(port, tabId, msg.gid);
           break;
+        case 'forget':
+          post(port, { type: 'forgotten', gid: msg.gid, ok: await forgetFact(msg.question || '') });
+          break;
         case 'focus': {
           const [frameId, id] = splitGid(msg.gid);
           await inFrames(tabId, (fid) => window.__fillai?.focus(fid), [id], [frameId]);
@@ -100,8 +104,33 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 });
 
+function siteOf(port) {
+  try {
+    return new URL(port.sender.url).hostname;
+  } catch {
+    return '';
+  }
+}
+
+// The panel's picture of one field.
+function forPanel(f, d) {
+  const out = {
+    gid: f.gid,
+    label: f.label,
+    kind: f.kind,
+    options: f.options || [],
+    multiple: !!f.multiple,
+    required: !!f.required,
+    placeholder: f.placeholder || '',
+    ...d,
+  };
+  if (isDateField(f)) out.dateLike = true;
+  return out;
+}
+
 async function analyze(port, tabId, signal) {
-  const [settings, knowledge, resume] = await Promise.all([getSettings(), getKnowledge(), getResumeFile()]);
+  const [settings, stored, resume] = await Promise.all([getSettings(), getKnowledge(), getResumeFile()]);
+  let knowledge = stored;
   const missing = [];
   if (!isConnected(settings)) missing.push('ai');
   if (isProfileEmpty(knowledge) && !knowledge.facts.length) missing.push('profile');
@@ -117,8 +146,27 @@ async function analyze(port, tabId, signal) {
     if (r.frameId === 0) page = r.result.context;
     for (const f of r.result.fields) scanned.push({ ...f, gid: `${r.frameId}:${f.id}`, frameId: r.frameId });
   }
-  const { fields, dropped } = prepareFields(scanned);
-  if (!fields.length) return post(port, { type: 'result', fields: [], dropped });
+  const { fields: all, dropped } = prepareFields(scanned);
+  if (!all.length) return post(port, { type: 'result', fields: [], dropped });
+
+  // Whatever the person already answered stays exactly as it is, and what
+  // they typed by hand is remembered for next time (and used for the rest of
+  // this form). Only the other questions go to the AI.
+  const mine = all.filter((f) => f.mine);
+  const fields = all.filter((f) => !f.mine);
+  const lessons = mine.map((f) => [f.gid, learnFrom(f)]).filter(([, l]) => l);
+  if (lessons.length) {
+    const site = siteOf(port);
+    await rememberFacts(
+      lessons.map(([, l]) => ({ ...l, site })),
+      'typed',
+    );
+    knowledge = await getKnowledge();
+  }
+  const remembered = new Map(lessons.map(([gid, l]) => [gid, l.question]));
+  const kept = mine.map((f) => forPanel(f, keepMine(f, remembered.get(f.gid))));
+  if (mine.length) await markAll(tabId, kept);
+  if (!fields.length) return post(port, { type: 'result', fields: kept, dropped, via: '' });
 
   const total = fields.length;
   const knowledgeText = textOf(knowledge);
@@ -160,18 +208,11 @@ async function analyze(port, tabId, signal) {
   if (signal.aborted) return;
   await markAll(tabId, decisions);
 
+  // Back in page order, the person's own answers among the rest.
+  const byGid = new Map([...fields.map((f, i) => [f.gid, forPanel(f, decisions[i])]), ...kept.map((k) => [k.gid, k])]);
   post(port, {
     type: 'result',
-    fields: fields.map((f, i) => ({
-      gid: f.gid,
-      label: f.label,
-      kind: f.kind,
-      options: f.options || [],
-      multiple: !!f.multiple,
-      required: !!f.required,
-      placeholder: f.placeholder || '',
-      ...decisions[i],
-    })),
+    fields: all.map((f) => byGid.get(f.gid)),
     cost: result.cost,
     via: result.via,
     dropped,
@@ -185,20 +226,23 @@ async function fillDecisions(tabId, fields, decisions) {
     const { frameId } = fields[i];
     const [, id] = splitGid(d.gid);
     if (!byFrame.has(frameId)) byFrame.set(frameId, []);
-    byFrame.get(frameId).push({ id, value: d.value, values: d.values, gid: d.gid });
+    byFrame.get(frameId).push({ id, value: d.value, values: d.values, date: d.date, gid: d.gid });
   });
   for (const [frameId, items] of byFrame) {
     let results = [];
     try {
-      const [res] = await inFrames(tabId, (list) => window.__fillai?.fill(list), [items.map(({ id, value, values }) => ({ id, value, values }))], [frameId]);
+      const [res] = await inFrames(tabId, (list) => window.__fillai?.fill(list), [items.map(({ id, value, values, date }) => ({ id, value, values, date }))], [frameId]);
       results = res?.result || [];
     } catch {
       results = [];
     }
     for (const item of items) {
       const r = results.find((x) => x.id === item.id);
-      if (r?.ok) continue;
       const d = decisions.find((x) => x.gid === item.gid);
+      if (r?.ok) {
+        if (r.shown) d.value = r.shown;
+        continue;
+      }
       d.status = 'ask';
       d.note = r?.error || 'Could not fill this field automatically.';
     }
@@ -212,7 +256,7 @@ async function markAll(tabId, decisions) {
   for (const d of decisions) {
     const [frameId, id] = splitGid(d.gid);
     if (!byFrame.has(frameId)) byFrame.set(frameId, {});
-    byFrame.get(frameId)[id] = MARK[d.status] || '';
+    byFrame.get(frameId)[id] = d.mine ? 'mine' : MARK[d.status] || '';
   }
   for (const [frameId, marks] of byFrame) {
     await inFrames(tabId, (m) => window.__fillai?.mark(m), [marks], [frameId]).catch(() => {});
@@ -222,21 +266,20 @@ async function markAll(tabId, decisions) {
 async function applyOne(port, tabId, msg) {
   const [frameId, id] = splitGid(msg.gid);
   const values = msg.values || [];
-  const [res] = await inFrames(tabId, (list) => window.__fillai?.fill(list), [[{ id, value: msg.value || '', values }]], [frameId]);
+  const item = { id, value: msg.value || '', values };
+  if (msg.date) item.date = msg.date;
+  const [res] = await inFrames(tabId, (list) => window.__fillai?.fill(list), [[item]], [frameId]);
   const r = res?.result?.[0];
   if (!r?.ok) return post(port, { type: 'applied', gid: msg.gid, ok: false, error: r?.error || 'Could not fill this field.' });
   let saved = false;
   if (msg.save?.question) {
-    const answer = values.length ? values.join(', ') : msg.value;
-    let site = '';
-    try {
-      site = new URL(port.sender.url).hostname;
-    } catch {}
-    await rememberFact({ question: msg.save.question, answer, site });
+    // Dates are saved as YYYY-MM-DD, so the next form can write them its own way.
+    const answer = msg.date || (values.length ? values.join(', ') : msg.value);
+    await rememberFact({ question: msg.save.question, answer, site: siteOf(port) });
     saved = true;
   }
   await inFrames(tabId, (m) => window.__fillai?.mark(m), [{ [id]: 'fill' }], [frameId]).catch(() => {});
-  post(port, { type: 'applied', gid: msg.gid, ok: true, value: msg.value, values, saved });
+  post(port, { type: 'applied', gid: msg.gid, ok: true, value: r.shown || msg.value, values, saved });
 }
 
 async function undoOne(port, tabId, gid) {

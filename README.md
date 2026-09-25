@@ -15,8 +15,9 @@ It runs free on your own computer by default. Nothing about you has to leave it.
 1. **Teach it once.** Drop in your resume PDF, add your portfolio or LinkedIn link and anything else you like. The AI reads it all and builds a structured profile: education, experience, projects, skills, links, contact details. You can see and edit every line.
 2. **Open any form** and press <kbd>Alt</kbd> <kbd>Shift</kbd> <kbd>F</kbd> (or click the Fill.ai icon). A small panel appears in the corner. Drag it anywhere, or shrink it to a button.
 3. **It reads the form and fills what it knows.** Names, email, phone, links, degree, college, graduation year, skills checkboxes, dropdowns, even the resume upload.
-4. **It asks about the rest.** Each field it couldn't answer gets a card. Answer it and choose **Fill once**, or **Save & fill** to remember the answer for every future form.
-5. **You check, then you submit.** Fill.ai never submits anything.
+4. **It asks about the rest.** Each field it couldn't answer gets a card. Answer it and choose **Fill once**, or **Save & fill** to remember the answer for every future form. Date questions get a date picker, and Fill.ai writes the date the way that form wants it (20/07/2004, 20/07/04, 2004-07-20).
+5. **What you already filled stays yours.** Anything you typed or picked on the page before opening Fill.ai is left exactly as you wrote it, and remembered for next time. The panel lists those answers under *You filled these*, each with a button to forget it.
+6. **You check, then you submit.** Fill.ai never submits anything.
 
 | Google Forms | Shrinks out of the way |
 | --- | --- |
@@ -47,8 +48,9 @@ Pick one on the settings page. You can switch any time; your profile stays.
 An AI that fills forms for you is only useful if it never makes things up. Fill.ai does not rely on the model behaving; the code checks every answer before it touches the page, whichever AI gave it.
 
 - **Every answer must cite your profile.** The model has to name where each answer came from (`education[0].institution`, a saved answer, ...). If the citation points at nothing, the answer is thrown away and the field goes to *Needs you*. The panel shows the source under each filled field. The one exception is attaching your saved resume to a field labelled resume or CV: the file is its own evidence.
-- **Checkable facts are checked.** An email must be one that is actually in your profile, a phone number must match yours digit for digit, and a dropdown answer must be one of the real options.
-- **Personal questions are always yours.** Gender, ethnicity, caste, religion, disability, veteran status and ID numbers are never filled automatically, whatever the model says.
+- **Checkable facts are checked.** An email must be one that is actually in your profile, a phone number must match yours digit for digit, a date of birth must match the one on file, and a dropdown answer must be one of the real options.
+- **Every fill is read back.** If the page changes a value after it goes in (an input mask that turns 20/07/2004 into 20/07/20, a country change that clears the city), Fill.ai notices, tries again, and tells you if it still isn't right.
+- **Personal questions are always yours.** Gender (including a bare "M/F"), a Mr/Ms title, ethnicity, caste, religion, disability, veteran status and ID numbers are never filled automatically, whatever the model says.
 - **Agreements are always yours.** Terms, privacy policies, arbitration and "I certify" boxes are never ticked for you.
 - **Some things are never read at all.** Passwords, OTPs, captchas and card or bank details are skipped before anything is sent to the AI.
 - **Hidden fields are ignored.** A form can hide a "phone" field to harvest autofill data. Fill.ai only reads fields a person can actually see.
@@ -72,6 +74,7 @@ To update, download the zip again, unzip it into the same folder replacing the f
 ## What goes where
 
 - Your profile, saved answers, resume file and API keys live in this browser only (`chrome.storage.local`). Nothing is synced.
+- A tiny script (`touch.js`, 1 KB) loads on every page so Fill.ai can tell which fields you changed by hand. It notes *which* fields, never what you type, keeps nothing once the page closes, and sends nothing anywhere. Answers are only saved when you open Fill.ai on that form, and you can delete any of them in settings.
 - When you fill a form, the form's questions, a short excerpt of the page (so drafts can mention the company) and your profile go to the AI you chose. With *On this computer* that is Ollama on `localhost`, so nothing leaves your machine at all. With Gemini it is Google's API, with Claude it is Anthropic's.
 - **Export profile** gives you everything as JSON; **Delete everything** wipes it.
 
@@ -100,8 +103,10 @@ Local models and Gemini's free tier cost nothing; the panel shows which model an
    Ollama (localhost) · Gemini API · Anthropic API
 ```
 
-- `src/content/scan.js` reads the form: native inputs, Google Forms' ARIA radios, checkboxes and listboxes, React comboboxes (their options are read by opening them for a moment), open shadow roots and cross-origin iframes. Labels come from what a person sees: `<label>`, `aria-labelledby`, fieldset legends and nearby text.
-- `src/content/fill.js` fills fields the way a person would, so React, Angular and Google Forms all register the change, then reads every value back. Anything that doesn't stick goes to *Needs you*.
+- `src/content/scan.js` reads the form: native inputs, Google Forms' ARIA radios, checkboxes and listboxes, React comboboxes (their options are read by opening them for a moment), Select2, Chosen and Tom Select boxes (the hidden `<select>` underneath is the real question; the box drawn over it is not), open shadow roots and cross-origin iframes. Labels come from what a person sees: `<label>`, `aria-labelledby`, fieldset legends and nearby text.
+- `src/content/fill.js` fills fields the way a person would, so React, Angular and Google Forms all register the change, then reads every value back. Clicks land on whatever a real pointer would hit (Google Forms only opens a dropdown for a click inside one particular child). Masked inputs that reject a pasted value are typed one key at a time. Anything that doesn't stick goes to *Needs you*.
+- `src/content/touch.js` runs on every page and notes which fields the person changed by hand, so those are kept and remembered, and never mistaken for something a site or an old draft put there.
+- `src/shared/dates.js` reads dates written almost any way, finds the format a field asks for (placeholder, input mask, hint text) and writes dates in it. Dates are stored as YYYY-MM-DD.
 - `src/shared/matcher.js` is the gatekeeper between the AI and the page: citations, option matching, format checks and the personal-question guards (`src/shared/sensitive.js`).
 - `src/shared/ai/` is the only code that talks to an AI. Every provider takes the same prompt and JSON schema and gives back the same shape, so nothing else knows which one answered.
   - `ollama.js` streams from Ollama with the schema as `format`, and sizes the context window to fit each prompt, since Ollama otherwise cuts long prompts silently. Ollama refuses requests from `chrome-extension://` origins unless `OLLAMA_ORIGINS` is set, so a `declarativeNetRequest` rule removes the Origin header from Fill.ai's own requests to the Ollama address, and nobody else's.
@@ -128,13 +133,14 @@ node build.mjs --test && node test/e2e/real-ollama.mjs [model]        # the fixt
 node build.mjs --test && node test/e2e/real-profile.mjs <resume.pdf>  # a real resume, your real local model
 ```
 
-The end-to-end suite runs 92 checks against the real extension: a job application with a React-style controlled input, a cross-origin iframe, hidden trap fields, a Google Forms style form with a second page, the same form answered by Gemini and by Claude, the settings page finding Ollama past its extension block and building a profile from a real PDF, switching providers, upgrading from v0.1, dragging and shrinking the panel, undo, *Save & fill* and saved answers being reused. The mock answers for all three APIs and deliberately invents one answer, and the suite checks that it is thrown out. Its Ollama rejects extension origins just like the real one.
+The end-to-end suite runs 121 checks against the real extension: a job application with a React-style controlled input, a cross-origin iframe, hidden trap fields, a Google Forms style form with a second page and a dropdown built like Google's real one, a careers page on real Select2 4.0 (a box set by the site, a city list that loads after the country, a list that only appears as you type, a multi-select) and a real jQuery Mask date field, answers typed by hand before Fill.ai opens being kept, remembered, forgotten and reused, the same form answered by Gemini and by Claude, the settings page finding Ollama past its extension block and building a profile from a real PDF, switching providers, upgrading from v0.1, dragging and shrinking the panel, undo, *Save & fill* and saved answers being reused. The mock answers for all three APIs and deliberately invents one answer, and the suite checks that it is thrown out. Its Ollama rejects extension origins just like the real one.
 
 ## Tested on
 
 - **Real local model:** `qwen3.5:4b` in Ollama 0.34 on an RTX 4060 laptop GPU filled the fixture job form (resume attached, invented answer rejected, nothing submitted) and built a profile from a real designed resume.
 - **Live sites, mock AI:** Greenhouse and Lever job applications (react-select dropdowns, resume upload, long option lists, EEO and consent questions), plain HTML forms, React-controlled inputs and cross-origin iframes. Nothing was ever submitted.
-- **Not yet with real keys:** Gemini and Claude have only answered the mock so far. A replica of Google Forms' structure has been tested, not a live Google Form.
+- **Live Google Form, mock AI:** three dropdowns and a date question picked through the panel on a public Google Form (September 2026). Nothing was submitted.
+- **Not yet with real keys:** Gemini and Claude have only answered the mock so far.
 
 ## Known gaps
 
@@ -142,12 +148,12 @@ The end-to-end suite runs 92 checks against the real extension: a job applicatio
 - Scanned (image-only) PDFs have no text for a local model to read. Paste the text under *Anything else*, or use Gemini for that step.
 - Workday and other step-by-step portals that reload the page between steps: reopen Fill.ai on each step.
 - Date pickers that only accept clicks on a calendar.
+- A date field that doesn't say its format is tried as DD/MM/YYYY, then DD/MM/YY. A US-style MM/DD field with no hint on the page would get the day and month swapped, so check dates on American forms.
 - Only PDF resumes can be attached to upload fields.
 
 ## Roadmap
 
 - Chrome Web Store release
-- Remembering which answers you changed after Fill.ai filled them, and learning from it
 
 ## License
 

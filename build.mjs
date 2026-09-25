@@ -19,6 +19,7 @@ const options = {
   entryPoints: {
     background: 'src/background/index.js',
     content: 'src/content/index.js',
+    touch: 'src/content/touch.js',
     options: 'src/options/options.js',
   },
   outdir,

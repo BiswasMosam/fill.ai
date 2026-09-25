@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Fill.ai",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Learns who you are once, then reads any form and fills it for you. Never submits on its own.",
   "icons": {
     "16": "icons/icon16.png",
@@ -17,6 +17,15 @@
     }
   },
   "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["touch.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ],
   "options_ui": { "page": "options.html", "open_in_tab": true },
   "permissions": ["storage", "scripting", "unlimitedStorage", "declarativeNetRequestWithHostAccess"],
   "host_permissions": ["<all_urls>"],

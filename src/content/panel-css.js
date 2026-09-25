@@ -15,6 +15,7 @@ export const PANEL_CSS = `
   --ask: #f5b544;
   --draft: #5cc8ff;
   --yours: #ff7a9a;
+  --mine: #4fd1a5;
   font: 13px/1.45 "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
   color: var(--text);
   -webkit-font-smoothing: antialiased;
@@ -86,7 +87,7 @@ export const PANEL_CSS = `
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); font-size: 12px; color: var(--muted); }
 .chip b { color: var(--text); font-weight: 650; }
 .chip .dot { opacity: 1; }
-.c-fill .dot { background: var(--fill); } .c-ask .dot { background: var(--ask); } .c-draft .dot { background: var(--draft); } .c-yours .dot { background: var(--yours); }
+.c-fill .dot { background: var(--fill); } .c-ask .dot { background: var(--ask); } .c-draft .dot { background: var(--draft); } .c-yours .dot { background: var(--yours); } .c-mine .dot { background: var(--mine); }
 
 .banner { padding: 10px 12px; border-radius: 12px; background: linear-gradient(135deg, rgba(167,139,250,.14), rgba(59,130,246,.10)); border: 1px solid rgba(167,139,250,.25); display: flex; align-items: center; gap: 10px; }
 .banner span { flex: 1; }
@@ -151,6 +152,7 @@ select.in option { background: #16151f; color: var(--text); }
 .frow .icon { grid-row: 1 / span 2; grid-column: 2; width: 26px; height: 26px; font-size: 14px; opacity: 0; }
 .frow:hover .icon, .frow .icon:focus-visible { opacity: 1; }
 .frow .src { grid-column: 1; margin-top: 2px; }
+.frow.mine .src span { color: var(--mine); border-color: rgba(79,209,165,.35); }
 .muted-row { color: var(--faint); font-size: 12px; padding: 4px 10px; }
 
 .pill {

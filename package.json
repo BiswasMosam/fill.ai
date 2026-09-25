@@ -1,6 +1,6 @@
 {
   "name": "fill-ai",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": true,
   "description": "An AI that learns who you are once, then reads any form and fills it for you.",
   "type": "module",
@@ -22,6 +22,9 @@
   "devDependencies": {
     "esbuild": "^0.28.2",
     "fflate": "^0.8.3",
-    "puppeteer-core": "^25.12.0"
+    "jquery": "^3.7.1",
+    "jquery-mask-plugin": "^1.14.16",
+    "puppeteer-core": "^25.12.0",
+    "select2": "^4.0.13"
   }
 }

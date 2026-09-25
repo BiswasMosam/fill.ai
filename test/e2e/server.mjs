@@ -36,7 +36,7 @@ function answerFor(field, profile, facts) {
   if (/full name/.test(label)) return ans('fill', b.full_name, ['basics.full_name']);
   if (/e-?mail/.test(label)) return ans('fill', b.email, ['basics.email']);
   if (/phone|mobile/.test(label)) return ans('fill', b.phone, ['basics.phone']);
-  if (/city/.test(label)) return ans('fill', b.location.city, ['basics.location.city']);
+  if (/city|airport/.test(label)) return ans('fill', b.location.city, ['basics.location.city']);
   if (/degree/.test(label)) return ans('fill', pick(field.options || [], 'b.tech', 'bachelor'), ['education[0].degree']);
   if (/graduation year/.test(label)) return ans('fill', profile.education[0].end.slice(0, 4), ['education[0].end'], { note: 'From your degree end date.' });
   if (/year of study/.test(label)) return ans('fill', 'Graduated', ['education[0].end'], { note: 'Your degree ended in 2026.' });
@@ -45,6 +45,13 @@ function answerFor(field, profile, facts) {
   if (/github/.test(label)) return ans('fill', profile.links[1].url, ['links[1].url']);
   if (/portfolio|website/.test(label)) return ans('fill', profile.links[2].url, ['links[2].url']);
   if (/country/.test(label)) return ans('fill', b.location.country, ['basics.location.country']);
+  if (/nationality/.test(label)) return ans('fill', '', ['basics.nationality'], { values: (field.options || []).filter((o) => o === b.nationality) });
+  // What qwen3.5:4b really did on a Select2 page: it was shown the box that
+  // displays the chosen city as a question called "Mumbai", and answered it.
+  if (/^(mumbai|dubai|pune|india)$/.test(label)) return ans('fill', b.nationality, ['basics.nationality']);
+  // Deliberately different from what the tests pick by hand first: Fill.ai
+  // must keep the person's answer, not this one.
+  if (/hear about/.test(label)) return ans('fill', pick(field.options || [], 'linkedin'), ['links[0].url']);
   if (/languages/.test(label)) {
     const spoken = profile.languages.map((l) => l.language);
     return ans('fill', '', ['languages'], { values: (field.options || []).filter((o) => spoken.includes(o)) });
@@ -230,6 +237,18 @@ export function startServer(port) {
         }
       });
       return;
+    }
+    // Real page libraries the fixtures are built with (Select2, jQuery Mask).
+    const VENDOR = {
+      '/vendor/jquery.js': 'jquery/dist/jquery.min.js',
+      '/vendor/select2.js': 'select2/dist/js/select2.min.js',
+      '/vendor/select2.css': 'select2/dist/css/select2.min.css',
+      '/vendor/jquery.mask.js': 'jquery-mask-plugin/dist/jquery.mask.min.js',
+    };
+    if (VENDOR[url.pathname]) {
+      const file = path.resolve(here, '../../node_modules', VENDOR[url.pathname]);
+      res.writeHead(200, { 'content-type': file.endsWith('.css') ? 'text/css' : 'text/javascript' });
+      return res.end(await readFile(file));
     }
     if (url.pathname.startsWith('/fixtures/')) {
       try {

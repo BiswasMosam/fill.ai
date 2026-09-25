@@ -236,6 +236,11 @@ export class Panel {
         if (f && msg.ok) Object.assign(f, { status: 'ask', applied: false, note: 'Undone. Fill it again here if you want.' });
         break;
       }
+      case 'forgotten': {
+        const f = this.field(msg.gid);
+        if (f) Object.assign(f, { remembered: null, forgot: true });
+        break;
+      }
       case 'error':
         return this.fail(msg.message);
       default:
@@ -309,6 +314,11 @@ export class Panel {
         return this.send({ type: 'focus', gid });
       case 'undo':
         return this.send({ type: 'undo', gid });
+      case 'forget': {
+        const f = this.field(gid);
+        if (f?.remembered) this.send({ type: 'forget', gid, question: f.remembered });
+        return;
+      }
       case 'once':
       case 'save':
       case 'insert':
@@ -341,7 +351,9 @@ export class Panel {
     }
     f.error = '';
     card.querySelectorAll('.btn').forEach((b) => (b.disabled = true));
-    this.send({ type: 'apply', gid: f.gid, value, values, save: act === 'save' ? { question: f.label } : null });
+    // A date picked here is YYYY-MM-DD; the page gets it in its own format.
+    const date = f.dateLike && card.querySelector('input[type=date].in') ? value : undefined;
+    this.send({ type: 'apply', gid: f.gid, value, values, date, save: act === 'save' ? { question: f.label } : null });
   }
 
   // ------------------------------------------------------------ render
@@ -450,10 +462,11 @@ export class Panel {
     const drafts = by((f) => f.status === 'draft' && !f.applied);
     const yours = by((f) => (f.status === 'sensitive' || f.status === 'consent') && !f.applied);
     const filled = by((f) => f.status === 'fill');
-    const quiet = by((f) => f.status === 'keep' || f.status === 'skip');
+    const mine = by((f) => f.mine);
+    const quiet = by((f) => (f.status === 'keep' || f.status === 'skip') && !f.mine);
 
     const chip = (cls, n, word) => (n ? `<span class="chip ${cls}"><span class="dot"></span><b>${n}</b> ${word}</span>` : '');
-    let html = `<div class="chips">${chip('c-fill', filled.length, 'filled')}${chip('c-ask', asks.length, asks.length === 1 ? 'needs you' : 'need you')}${chip('c-draft', drafts.length, drafts.length === 1 ? 'draft' : 'drafts')}${chip('c-yours', yours.length, 'your call')}</div>`;
+    let html = `<div class="chips">${chip('c-fill', filled.length, 'filled')}${chip('c-ask', asks.length, asks.length === 1 ? 'needs you' : 'need you')}${chip('c-draft', drafts.length, drafts.length === 1 ? 'draft' : 'drafts')}${chip('c-yours', yours.length, 'your call')}${chip('c-mine', mine.length, 'yours, kept')}</div>`;
 
     if (this.state.newFields) {
       html += `<div class="banner"><span>${this.state.newFields} new question${this.state.newFields === 1 ? '' : 's'} appeared.</span><button class="btn primary" data-act="rescan">Fill them</button></div>`;
@@ -468,6 +481,7 @@ export class Panel {
     html += section('Drafts', drafts, (f) => this.draftCard(f));
     html += section('Your call', yours, (f) => this.askCard(f, 'yours'));
     html += section('Filled', filled, (f) => this.filledRow(f), filled.length <= 12 || !asks.length);
+    html += section('You filled these', mine, (f) => this.mineRow(f), mine.length <= 6);
     if (quiet.length) {
       html += section('Left alone', quiet, (f) => `<div class="muted-row" data-gid="${h(f.gid)}"><span class="q" data-act="focus">${h(f.label)}</span>${f.status === 'keep' ? ' · already filled' : ''}</div>`, false);
     }
@@ -511,6 +525,19 @@ export class Panel {
       ${this.sources(f)}</div>`;
   }
 
+  // An answer the person gave before Fill.ai opened: never changed, and
+  // remembered when they typed it by hand.
+  mineRow(f) {
+    const shown = f.values?.length ? f.values.join(', ') : f.value;
+    const tag = f.remembered ? 'Remembered' : f.forgot ? 'Forgotten' : 'Kept as is';
+    const forget = f.remembered ? `<button class="icon" data-act="forget" title="Forget this answer" aria-label="Forget ${h(f.label)}">&#215;</button>` : '';
+    return `<div class="frow mine" data-gid="${h(f.gid)}">
+      <span class="q" data-act="focus">${h(f.label)}</span>
+      ${forget}
+      <span class="v" title="${h(shown)}">${h(shown)}</span>
+      <div class="src"><span>${tag}</span></div></div>`;
+  }
+
   sources(f) {
     const labels = [...new Set((f.sources || []).map((s) => s.label).filter(Boolean))].slice(0, 3);
     return labels.length ? `<div class="src">${labels.map((l) => `<span>${h(l)}</span>`).join('')}</div>` : '';
@@ -534,6 +561,9 @@ export class Panel {
       return `<select class="in"><option value="">Choose…</option>${f.options.map((o) => `<option ${o === suggestion ? 'selected' : ''}>${h(o)}</option>`).join('')}</select>`;
     }
     if (f.kind === 'textarea' || f.kind === 'richtext') return `<textarea class="in" rows="4" placeholder="Type your answer">${h(suggestion)}</textarea>`;
+    // Any date question gets a date picker, whatever box the page uses: no
+    // guessing whether it wants 20/07/2004, 20/07/04 or 2004-07-20.
+    if (f.dateLike) return `<input class="in" type="date" value="${h(f.date || (/^\d{4}-\d{2}-\d{2}$/.test(suggestion) ? suggestion : ''))}">`;
     const type = { date: 'date', month: 'month', time: 'time', email: 'email', tel: 'tel', url: 'url', number: 'number' }[f.kind] || 'text';
     return `<input class="in" type="${type}" value="${h(suggestion)}" placeholder="${h(f.placeholder || 'Type your answer')}">`;
   }

@@ -62,15 +62,34 @@ export async function saveFacts(facts) {
 
 // Save (or overwrite) an answer the user typed into a form. Same question on
 // the same kind of field replaces the old answer instead of piling up.
-export async function rememberFact({ question, answer, site }) {
+export async function rememberFact(fact) {
+  return rememberFacts([fact]);
+}
+
+// Several at once, in one write. Returns the facts and which of the given
+// answers were new or changed (an identical answer is left alone, date and all).
+export async function rememberFacts(list, how = 'saved') {
   const facts = await getFacts();
+  const changed = [];
+  for (const { question, answer, site } of list) {
+    const key = question.trim().toLowerCase();
+    const existing = facts.findIndex((f) => f.question.trim().toLowerCase() === key);
+    if (existing !== -1 && facts[existing].answer === answer) continue;
+    const fact = { question: question.trim(), answer, site: site || '', savedAt: new Date().toISOString(), how };
+    if (existing === -1) facts.push(fact);
+    else facts[existing] = fact;
+    changed.push(fact.question);
+  }
+  if (changed.length) await saveFacts(facts);
+  return { facts, changed };
+}
+
+export async function forgetFact(question) {
   const key = question.trim().toLowerCase();
-  const existing = facts.findIndex((f) => f.question.trim().toLowerCase() === key);
-  const fact = { question: question.trim(), answer, site: site || '', savedAt: new Date().toISOString() };
-  if (existing === -1) facts.push(fact);
-  else facts[existing] = fact;
-  await saveFacts(facts);
-  return facts;
+  const facts = await getFacts();
+  const kept = facts.filter((f) => f.question.trim().toLowerCase() !== key);
+  if (kept.length !== facts.length) await saveFacts(kept);
+  return kept.length !== facts.length;
 }
 
 export async function getResumeFile() {

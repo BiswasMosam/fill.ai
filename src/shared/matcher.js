@@ -5,6 +5,7 @@
 import { classifyField } from './sensitive.js';
 import { describePath, hasContent, resolvePath, textOf } from './paths.js';
 import { clean, digits, matchOption, norm } from './text.js';
+import { detectFormat, formatDate, isDateField, parseDate, sameDate, toISO } from './dates.js';
 
 const TEXTUAL = new Set(['text', 'email', 'tel', 'url', 'number', 'date', 'month', 'time', 'textarea', 'richtext', 'combobox', 'dropdown']);
 const PROSE = new Set(['text', 'textarea', 'richtext']);
@@ -41,7 +42,23 @@ export function modelView(field, knowledgeText = '') {
   }
   if (field.multiple) view.multiple = true;
   if (field.required) view.required = true;
+  if (isDateField(field)) view.date = true;
   return view;
+}
+
+// A field the person already answered: left exactly as it is.
+export function keepMine(field, remembered) {
+  const values = Array.isArray(field.current) ? field.current : [];
+  return {
+    gid: field.gid,
+    status: 'keep',
+    value: values.length ? '' : textOf(field.current),
+    values,
+    sources: [],
+    note: '',
+    mine: field.mine,
+    remembered: remembered || null,
+  };
 }
 
 // A list of 3,000 universities would cost more than the rest of the form put
@@ -94,7 +111,7 @@ function decide(field, answer, knowledge, resumeOnFile) {
   if (guard) {
     const shaped = status === 'fill' || status === 'sensitive' ? shape(field, value, values, resumeOnFile) : { error: 'none' };
     const traced = sources.length > 0 && !shaped.error;
-    return {
+    const out = {
       ...base,
       status: guard,
       value: traced ? shaped.value : '',
@@ -102,6 +119,8 @@ function decide(field, answer, knowledge, resumeOnFile) {
       sources: traced ? sources : [],
       note: guard === 'consent' ? 'Your call. Fill.ai never agrees to anything for you.' : 'Personal question. Fill.ai never fills these on its own.',
     };
+    if (traced && shaped.date) out.date = shaped.date;
+    return out;
   }
 
   if (status === 'keep' || status === 'ask') return { ...base, note: note || 'Needs an answer.' };
@@ -132,7 +151,9 @@ function decide(field, answer, knowledge, resumeOnFile) {
   if (hasContent(field.current) && same(field, field.current, shaped)) {
     return { ...base, status: 'keep', value: textOf(field.current), sources, note };
   }
-  return { ...base, status: 'fill', value: shaped.value, values: shaped.values, sources, note };
+  const out = { ...base, status: 'fill', value: shaped.value, values: shaped.values, sources, note };
+  if (shaped.date) out.date = shaped.date;
+  return out;
 }
 
 // Fit a value to what the field can accept, or explain why it can't.
@@ -167,7 +188,10 @@ function shape(field, value, values, resumeOnFile) {
   }
   if (!TEXTUAL.has(kind)) return { error: 'Fill.ai cannot fill this kind of field yet.' };
   if (!value) return { error: 'Empty answer.' };
-  if (kind === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(value)) return { error: 'Needs a full date.' };
+  if (isDateField(field)) {
+    const dated = shapeDate(field, value);
+    if (dated) return dated;
+  }
   if (kind === 'month' && !/^\d{4}-\d{2}$/.test(value)) return { error: 'Needs a month and year.' };
   if (kind === 'number' && !/^-?\d+(\.\d+)?$/.test(value)) return { error: 'Needs a number.' };
   if (kind === 'url' && !/^https?:\/\//i.test(value)) return { value: `https://${value}`, values: [] };
@@ -175,6 +199,24 @@ function shape(field, value, values, resumeOnFile) {
   if (max && value.length > max) return { error: `Answer is longer than the ${max} characters allowed.` };
   return { value, values: [] };
 }
+
+// Dates are kept as YYYY-MM-DD and written in whatever shape the field
+// shows. Returns null for an answer that isn't a date at all ("Immediately"),
+// which a text field may still take as it is.
+export function shapeDate(field, value) {
+  const fmt = detectFormat(field.format?.date);
+  const date = parseDate(value, 'YMD') || parseDate(value, fmt?.order || '');
+  if (!date) {
+    if (field.kind === 'date' || /\d{1,2}[-/.]\d{1,2}|\d{6}/.test(value)) return { error: 'Needs a full date.' };
+    return null;
+  }
+  const iso = toISO(date);
+  if (field.kind === 'date') return { value: iso, values: [], date: iso };
+  return { value: formatDate(date, fmt || { order: 'DMY', sep: '/', year: 4 }), values: [], date: iso };
+}
+
+// Anything in running text that could be a whole date.
+const DATES_IN_TEXT = /\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}|\d{1,2}(?:st|nd|rd|th)? [A-Za-z]{3,9},? \d{4}|[A-Za-z]{3,9} \d{1,2}(?:st|nd|rd|th)?,? \d{4}|\b\d{6}(?:\d{2})?\b/g;
 
 // Cheap, strict checks for the fields where a made-up answer does real harm.
 function checkEvidence(field, value, evidence) {
@@ -190,15 +232,66 @@ function checkEvidence(field, value, evidence) {
     const tail = d.slice(-Math.min(10, d.length));
     if (d.length >= 6 && !known.includes(tail)) return 'That number is not in your profile.';
   }
+  if (/\b(birth|dob|d o b|born)\b/.test(label)) {
+    const want = parseDate(value, 'YMD') || parseDate(value, detectFormat(field.format?.date)?.order || 'DMY');
+    // Any reading of a date in the evidence will do ("200704" may be either
+    // way round); the digits still have to be there.
+    const stated = (evidence.match(DATES_IN_TEXT) || []).flatMap((t) => ['YMD', 'DMY', 'MDY'].map((o) => parseDate(t, o)));
+    if (want && !stated.some((d) => sameDate(d, want))) return 'That date of birth is not in your profile.';
+  }
   return '';
 }
 
 function same(field, current, shaped) {
+  if (shaped.date) {
+    const fmt = detectFormat(field.format?.date);
+    const cur = parseDate(textOf(current), 'YMD') || parseDate(textOf(current), fmt?.order || 'DMY');
+    return sameDate(cur, parseDate(shaped.date, 'YMD'));
+  }
   if (field.multiple) {
     const cur = (Array.isArray(current) ? current : [current]).map(norm).sort().join('|');
     return cur === shaped.values.map(norm).sort().join('|');
   }
   return norm(textOf(current)) === norm(shaped.value);
+}
+
+// ---------------------------------------------------------------- what the person filled
+
+// Labels that only make sense next to their own question.
+const CONTEXTUAL = /^(other|others|other response|please specify|if other.*|if yes.*|if no.*|specify|details?|answer|your answer|comments?|remarks?|unlabelled field)$/i;
+
+// Does the answer look like the kind of thing the label asks for? A
+// LinkedIn box holding "Indian" was not typed there on purpose.
+export function plausible(field, value) {
+  // A choice is one of the page's own options, whatever the label says
+  // ("Do you want to give another phone number?" takes "Yes").
+  if (field.options?.length) return true;
+  const label = norm(`${field.label} ${field.placeholder || ''}`);
+  const v = clean(value);
+  if (field.kind === 'email' || /\be ?mail\b/.test(label)) return /@/.test(v);
+  if (field.kind === 'url' || /\b(url|linkedin|github|website|portfolio|link)\b/.test(label)) return /^(https?:\/\/)?[\w-]+(\.[\w-]+)+\S*$/i.test(v);
+  if (field.kind === 'tel' || /\b(phone|mobile|contact number|whatsapp)\b/.test(label)) return digits(v).length >= 6;
+  if (/\b(birth|dob|born)\b/.test(label)) return /\d/.test(v);
+  return true;
+}
+
+// Turn what the person put in a field by hand into a saved answer, or null
+// when it shouldn't become one: private questions, uploads, and one-off
+// prose written for this form. Only answers they changed themselves
+// ('typed'), never what the page or an old draft put there.
+export function learnFrom(field) {
+  if (field.mine !== 'typed' || field.guard || field.kind === 'file') return null;
+  const question = clean(field.label);
+  if (question.length < 2 || CONTEXTUAL.test(question)) return null;
+  let answer = Array.isArray(field.current) ? field.current.map(clean).filter(Boolean).join(', ') : clean(field.current);
+  if (!answer) return null;
+  if (answer.length > (field.kind === 'textarea' || field.kind === 'richtext' ? 150 : 200)) return null;
+  if (!plausible(field, answer)) return null;
+  if (isDateField(field)) {
+    const d = parseDate(answer, 'YMD') || parseDate(answer, detectFormat(field.format?.date)?.order || 'DMY');
+    if (d) answer = toISO(d);
+  }
+  return { question, answer };
 }
 
 export function summarize(decisions) {

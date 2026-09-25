@@ -555,7 +555,7 @@ async function renderFacts() {
   const facts = await getFacts();
   const list = $('#factList');
   if (!facts.length) {
-    list.replaceChildren(el('p', { class: 'empty' }, 'No saved answers yet. When a form asks something your resume does not cover, choose "Save & fill" and it lands here.'));
+    list.replaceChildren(el('p', { class: 'empty' }, 'No saved answers yet. When a form asks something your resume does not cover, choose "Save & fill", or just type it into the form: Fill.ai remembers what you fill in yourself.'));
     return;
   }
   const persist = async () => {
@@ -570,7 +570,7 @@ async function renderFacts() {
         el('input', { type: 'text', value: fact.question, 'aria-label': 'Question', placeholder: 'Question', onchange: (e) => ((fact.question = e.target.value), persist()) }),
         el('textarea', { rows: 1, value: fact.answer, 'aria-label': 'Answer', placeholder: 'Answer', onchange: (e) => ((fact.answer = e.target.value), persist()) }),
         el('button', { class: 'ghost small', type: 'button', onclick: async () => (facts.splice(i, 1), await saveFacts(facts), renderFacts(), refreshReadiness()) }, 'Delete'),
-        el('div', { class: 'meta' }, [fact.site && `From ${fact.site}`, when].filter(Boolean).join(' · ')),
+        el('div', { class: 'meta' }, [fact.how === 'typed' ? 'You typed this' : '', fact.site && `${fact.how === 'typed' ? 'on' : 'From'} ${fact.site}`, when].filter(Boolean).join(' · ')),
       );
     }),
   );
